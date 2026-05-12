@@ -1,0 +1,39 @@
+{
+  "name": "@solutio/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./tenant-client": "./src/tenant-client.ts",
+    "./seed": "./src/seed.ts"
+  },
+  "scripts": {
+    "prisma:generate": "prisma generate",
+    "prisma:migrate:dev": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:validate": "prisma validate",
+    "prisma:diff": "prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code",
+    "seed": "tsx src/seed.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --project unit",
+    "test:integration": "vitest run --project integration"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "7.8.0",
+    "@prisma/client": "7.8.0",
+    "pg": "8.20.0"
+  },
+  "devDependencies": {
+    "@solutio/config": "workspace:*",
+    "@testcontainers/postgresql": "11.14.0",
+    "@types/pg": "8.20.0",
+    "prisma": "7.8.0",
+    "testcontainers": "11.14.0",
+    "tsx": "4.21.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.6"
+  }
+}

@@ -1,0 +1,218 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["public", "auth"]
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  STAFF
+
+  @@schema("public")
+}
+
+model Tenant {
+  id        String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  slug      String   @unique
+  name      String
+  currency  String   @default("NGN")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users      User[]
+  customers  Customer[]
+  properties Property[]
+  plans      Plan[]
+
+  @@schema("public")
+}
+
+model User {
+  id                 String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenantId           String   @db.Uuid
+  authUserId         String   @db.Uuid
+  email              String
+  name               String
+  role               UserRole
+  mustChangePassword Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, authUserId])
+  @@unique([authUserId])
+  @@index([tenantId])
+  @@schema("public")
+}
+
+model Customer {
+  id         String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenantId   String    @db.Uuid
+  fullName   String
+  email      String?
+  phone      String
+  nationalId String?
+  notes      String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+  createdBy  String?   @db.Uuid
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  plans  Plan[]
+
+  @@index([tenantId])
+  @@index([tenantId, phone])
+  @@schema("public")
+}
+
+enum PropertyStatus {
+  AVAILABLE
+  RESERVED
+  SOLD
+
+  @@schema("public")
+}
+
+model Property {
+  id             String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenantId       String         @db.Uuid
+  code           String
+  title          String
+  addressLine    String
+  city           String
+  totalPriceKobo BigInt
+  status         PropertyStatus @default(AVAILABLE)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  deletedAt      DateTime?
+  createdBy      String?        @db.Uuid
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  plans  Plan[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, status])
+  @@schema("public")
+}
+
+enum PlanStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  DEFAULTED
+  CANCELLED
+
+  @@schema("public")
+}
+
+model Plan {
+  id             String     @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenantId       String     @db.Uuid
+  customerId     String     @db.Uuid
+  propertyId     String     @db.Uuid
+  totalPriceKobo BigInt
+  depositKobo    BigInt
+  monthlyKobo    BigInt
+  termMonths     Int
+  startDate      DateTime   @db.Date
+  status         PlanStatus @default(DRAFT)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  deletedAt      DateTime?
+  createdBy      String?    @db.Uuid
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  customer     Customer      @relation(fields: [customerId], references: [id])
+  property     Property      @relation(fields: [propertyId], references: [id])
+  installments Installment[]
+  payments     Payment[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, customerId])
+  @@index([tenantId, propertyId, status])
+  @@schema("public")
+}
+
+enum InstallmentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+  WAIVED
+
+  @@schema("public")
+}
+
+model Installment {
+  id             String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenantId       String            @db.Uuid
+  planId         String            @db.Uuid
+  sequenceNo     Int
+  dueDate        DateTime          @db.Date
+  amountDueKobo  BigInt
+  amountPaidKobo BigInt            @default(0)
+  status         InstallmentStatus @default(PENDING)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  plan        Plan                @relation(fields: [planId], references: [id])
+  allocations PaymentAllocation[]
+
+  @@unique([planId, sequenceNo])
+  @@index([tenantId, status, dueDate])
+  @@schema("public")
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  CHEQUE
+  CARD_MANUAL
+  OTHER
+
+  @@schema("public")
+}
+
+model Payment {
+  id           String        @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenantId     String        @db.Uuid
+  planId       String        @db.Uuid
+  amountKobo   BigInt
+  paidAt       DateTime
+  method       PaymentMethod
+  reference    String?
+  notes        String?
+  recordedBy   String        @db.Uuid
+  reversedById String?       @db.Uuid
+  createdAt    DateTime      @default(now())
+
+  plan        Plan                @relation(fields: [planId], references: [id])
+  allocations PaymentAllocation[]
+  reversedBy  Payment?            @relation("PaymentReversal", fields: [reversedById], references: [id])
+  reverses    Payment[]           @relation("PaymentReversal")
+
+  @@index([tenantId, planId, paidAt])
+  @@schema("public")
+}
+
+model PaymentAllocation {
+  id            String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenantId      String   @db.Uuid
+  paymentId     String   @db.Uuid
+  installmentId String   @db.Uuid
+  amountKobo    BigInt
+  createdAt     DateTime @default(now())
+
+  payment     Payment     @relation(fields: [paymentId], references: [id])
+  installment Installment @relation(fields: [installmentId], references: [id])
+
+  @@index([tenantId, paymentId])
+  @@index([tenantId, installmentId])
+  @@schema("public")
+}
