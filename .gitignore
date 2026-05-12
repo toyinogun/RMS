@@ -1,0 +1,43 @@
+# deps
+node_modules/
+.pnpm-store/
+
+# build
+.next/
+.turbo/
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# coverage and test artifacts
+coverage/
+playwright-report/
+test-results/
+
+# env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# editor / OS
+.DS_Store
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# secrets — raw k8s Secret manifests are NEVER committed
+deploy/**/Secret.yaml
+deploy/**/*.secret.yaml
+!deploy/**/*.sealedsecret.yaml
+
+# generated Prisma client
+packages/db/src/generated/

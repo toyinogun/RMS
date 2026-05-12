@@ -1,0 +1,16 @@
+{
+  "name": "@solutio/config",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./eslint/index.js",
+  "exports": {
+    "./eslint": "./eslint/index.js",
+    "./prettier": "./prettier/index.js",
+    "./tsconfig/base.json": "./tsconfig/base.json"
+  },
+  "devDependencies": {
+    "eslint": "10.3.0",
+    "@typescript-eslint/eslint-plugin": "8.59.3",
+    "@typescript-eslint/parser": "8.59.3"
+  }
+}
