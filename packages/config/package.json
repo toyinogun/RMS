@@ -8,7 +8,7 @@
     "./prettier": "./prettier/index.js",
     "./tsconfig/base.json": "./tsconfig/base.json"
   },
-  "devDependencies": {
+  "dependencies": {
     "eslint": "10.3.0",
     "@typescript-eslint/eslint-plugin": "8.59.3",
     "@typescript-eslint/parser": "8.59.3"
