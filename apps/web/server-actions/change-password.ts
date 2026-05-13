@@ -5,7 +5,8 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { auth } from '@/lib/auth';
 import { getTenantContext } from '@/lib/tenant-context';
-import { forTenant, prisma } from '@solutio/db';
+import { prisma } from '@solutio/db/client';
+import { forTenant } from '@solutio/db/tenant-client';
 
 const schema = z
   .object({
