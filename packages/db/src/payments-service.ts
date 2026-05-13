@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { allocatePayment } from '@solutio/shared/payments';
 import type { Kobo } from '@solutio/shared/money';
 import type { TenantContext } from '@solutio/shared/tenant';
@@ -52,26 +52,31 @@ export async function recordPayment(
         })),
       );
 
+      // tenantId is injected at runtime by forTenant()'s $extends query hook,
+      // but Prisma's generated input types don't reflect that. Shape is still
+      // checked via `satisfies` against Omit<..., 'tenantId'>.
+      const paymentData = {
+        planId: input.planId,
+        amountKobo: input.amountKobo,
+        paidAt: input.paidAt,
+        method: input.method,
+        reference: input.reference ?? null,
+        notes: input.notes ?? null,
+        recordedBy: ctx.user.id,
+      } satisfies Omit<Prisma.PaymentUncheckedCreateInput, 'tenantId'>;
       const payment = await tx.payment.create({
-        data: {
-          planId: input.planId,
-          amountKobo: input.amountKobo,
-          paidAt: input.paidAt,
-          method: input.method,
-          reference: input.reference ?? null,
-          notes: input.notes ?? null,
-          recordedBy: ctx.user.id,
-        },
+        data: paymentData as unknown as Prisma.PaymentUncheckedCreateInput,
       });
 
       const today = new Date();
       for (const alloc of result.allocations) {
+        const allocData = {
+          paymentId: payment.id,
+          installmentId: alloc.installmentId,
+          amountKobo: alloc.amountKobo,
+        } satisfies Omit<Prisma.PaymentAllocationUncheckedCreateInput, 'tenantId'>;
         await tx.paymentAllocation.create({
-          data: {
-            paymentId: payment.id,
-            installmentId: alloc.installmentId,
-            amountKobo: alloc.amountKobo,
-          },
+          data: allocData as unknown as Prisma.PaymentAllocationUncheckedCreateInput,
         });
         const inst = installments.find((i) => i.id === alloc.installmentId)!;
         const newPaid = (inst.amountPaidKobo + alloc.amountKobo) as Kobo;
