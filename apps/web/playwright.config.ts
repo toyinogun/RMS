@@ -2,7 +2,11 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: /happy-path\.spec\.ts$/,
+  // `.e2e.ts` (not `.spec.ts`) so Vitest's default `**/*.spec.ts` scan, which
+  // runs alongside workspace projects when invoked from the repo root, does
+  // not collect this file. Playwright's only requirement is matching this
+  // testMatch.
+  testMatch: /.*\.e2e\.ts$/,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   // The happy-path test mutates seed state (sets mustChangePassword=false), so
