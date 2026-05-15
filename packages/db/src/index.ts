@@ -13,3 +13,15 @@ export {
   CustomerNotFoundError,
   CustomerHasPlansError,
 } from './customers-service.js';
+export {
+  createProperty,
+  updateProperty,
+  setPropertyStatus,
+  softDeleteProperty,
+  listProperties,
+  getProperty,
+  PropertyNotFoundError,
+  PropertyCodeConflictError,
+  PropertyStatusChangeBlockedError,
+  PropertyHasPlansError,
+} from './properties-service.js';
