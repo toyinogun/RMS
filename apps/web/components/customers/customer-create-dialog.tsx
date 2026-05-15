@@ -4,6 +4,7 @@ import * as React from 'react';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -35,6 +36,7 @@ export function CustomerCreateDialog({ trigger, onCreated }: CustomerCreateDialo
       <DialogContent>
         <DialogHeader>
           <DialogTitle>New customer</DialogTitle>
+          <DialogDescription>Enter the new customer&apos;s details below.</DialogDescription>
         </DialogHeader>
         <CustomerForm mode="create" variant="inline" onSubmit={handleSubmit} />
       </DialogContent>
