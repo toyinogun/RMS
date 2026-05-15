@@ -25,3 +25,12 @@ export {
   PropertyStatusChangeBlockedError,
   PropertyHasPlansError,
 } from './properties-service';
+export {
+  createPlan,
+  cancelPlan,
+  listPlans,
+  getPlan,
+  PlanNotFoundError,
+  PlanHasPaymentsError,
+  PropertyNotAvailableError,
+} from './plans-service';
