@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { formatKobo } from '../kobo.js';
 import { parseNgn } from '../parse.js';
 import type { Kobo } from '../kobo.js';
 
@@ -53,5 +54,19 @@ describe('parseNgn', () => {
 
   test('rejects sub-kobo precision', () => {
     expect(() => parseNgn('1.234')).toThrow(/sub-kobo|precision/i);
+  });
+
+  test('parseNgn ∘ formatKobo is identity for representative values', () => {
+    const samples = [0n, 1n, 99n, 100n, 10_000n, 12_345_678n, 100_000_000_000n] as Kobo[];
+    for (const k of samples) {
+      expect(parseNgn(formatKobo(k))).toBe(k);
+    }
+  });
+
+  test('parseNgn ∘ formatKobo handles negatives', () => {
+    const samples = [-1n, -100n, -25_000_050n] as Kobo[];
+    for (const k of samples) {
+      expect(parseNgn(formatKobo(k))).toBe(k);
+    }
   });
 });
