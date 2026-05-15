@@ -46,9 +46,21 @@ test('M3: create DRAFT plan with materialized installments, then cancel', async 
   await expect(page).toHaveURL('/plans/new');
 
   // Customer combobox defaults to "Existing" mode; pick our newly-created one.
-  await page.getByLabel(/pick customer/i).selectOption({ label: /M3 Customer/ });
-  // Property combobox: pick the M3-01 entry.
-  await page.getByLabel(/pick available property/i).selectOption({ label: /M3-01/ });
+  // Native <select> options — Playwright's selectOption takes a literal value
+  // or label, not a regex. Read the option's value, then select by value.
+  const customerSelect = page.getByLabel(/pick customer/i);
+  const customerValue = await customerSelect
+    .locator('option', { hasText: 'M3 Customer' })
+    .first()
+    .getAttribute('value');
+  await customerSelect.selectOption(customerValue!);
+
+  const propertySelect = page.getByLabel(/pick available property/i);
+  const propertyValue = await propertySelect
+    .locator('option', { hasText: 'M3-01' })
+    .first()
+    .getAttribute('value');
+  await propertySelect.selectOption(propertyValue!);
 
   await page.getByLabel(/total price \(ngn\)/i).fill('5,000,000');
   await page.getByLabel(/deposit \(ngn\)/i).fill('500,000');
