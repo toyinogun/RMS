@@ -17,9 +17,9 @@ export default async function AuthenticatedLayout({
   const currentPath = hdrs.get('x-pathname') ?? '/';
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-paper-50 text-ink-900">
       <SiteNav currentPath={currentPath} userEmail={ctx.user.email} role={ctx.user.role} />
-      <main className="mx-auto max-w-6xl px-6 py-6">{children}</main>
+      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">{children}</main>
       <Toaster />
     </div>
   );

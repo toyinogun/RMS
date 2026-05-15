@@ -45,29 +45,28 @@ test('M3: create DRAFT plan with materialized installments, then cancel', async 
   await page.getByRole('link', { name: 'New plan' }).click();
   await expect(page).toHaveURL('/plans/new');
 
-  // Customer combobox defaults to "Existing" mode; pick our newly-created one.
-  // Native <select> options — Playwright's selectOption takes a literal value
-  // or label, not a regex. Read the option's value, then select by value.
-  const customerSelect = page.getByLabel(/pick customer/i);
-  const customerValue = await customerSelect
-    .locator('option', { hasText: 'M3 Customer' })
-    .first()
-    .getAttribute('value');
-  await customerSelect.selectOption(customerValue!);
+  // Step 1 — pick the existing buyer via the search combobox.
+  await page.getByLabel(/search buyers/i).click();
+  await page.getByRole('option', { name: /m3 customer/i }).click();
+  await page.getByRole('button', { name: /^continue$/i }).click();
 
-  const propertySelect = page.getByLabel(/pick available property/i);
-  const propertyValue = await propertySelect
-    .locator('option', { hasText: 'M3-01' })
-    .first()
-    .getAttribute('value');
-  await propertySelect.selectOption(propertyValue!);
+  // Step 2 — pick the property.
+  await expect(page.getByRole('heading', { name: /which property/i })).toBeVisible();
+  await page.getByRole('option', { name: /m3-01/i }).click();
+  await page.getByRole('button', { name: /^continue$/i }).click();
 
-  await page.getByLabel(/total price \(ngn\)/i).fill('5,000,000');
-  await page.getByLabel(/deposit \(ngn\)/i).fill('500,000');
-  await page.getByLabel(/monthly \(ngn\)/i).fill('200,000');
-  await page.getByLabel(/term \(months\)/i).fill('24');
+  // Step 3 — payment terms. Total prefills from the property; fix deposit/monthly/term.
+  await expect(page.getByRole('heading', { name: /payment terms/i })).toBeVisible();
+  await page.getByLabel(/down payment today/i).fill('500,000');
+  await page.getByLabel(/monthly amount/i).fill('200,000');
+  await page.getByLabel(/term \(months/i).fill('24');
+  await page.getByRole('button', { name: /preview schedule/i }).click();
 
-  await page.getByRole('button', { name: /create plan/i }).click();
+  // Step 4 — review then confirm.
+  await expect(
+    page.getByRole('heading', { name: /show the buyer their schedule/i }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: /confirm sale/i }).click();
 
   // Land on plan detail; status should be DRAFT.
   await expect(page).toHaveURL(/\/plans\/[0-9a-f-]+/);
