@@ -986,7 +986,7 @@ function TermsStep({ form }: { form: UseFormReturn<FormValues> }) {
                 id="depositPaidAt"
                 type="date"
                 className="bg-paper-50 font-mono"
-                max={startDate || undefined}
+                min={startDate || undefined}
                 {...register('depositPaidAt')}
               />
               <p className="text-[12px] text-ink-500">

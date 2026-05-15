@@ -363,8 +363,14 @@ describe('BuyerOnboardingWizard', () => {
 
     await user.click(screen.getByLabelText(/deposit received today/i));
     await user.selectOptions(screen.getByLabelText(/^method/i), 'TRANSFER');
+    // Server requires depositPaidAt >= startDate. startDate defaults to today
+    // via the wizard's todayIso(), so the canonical "deposit at plan start"
+    // case is depositPaidAt === startDate.
+    const startDateValue = (
+      screen.getByLabelText(/first payment date/i) as HTMLInputElement
+    ).value;
     // The date input uses native YYYY-MM-DD format.
-    await user.type(screen.getByLabelText(/^date$/i), '2026-05-10');
+    await user.type(screen.getByLabelText(/^date$/i), startDateValue);
     await user.type(
       screen.getByLabelText(/reference \(optional\)/i),
       'TX-77231',
@@ -380,9 +386,35 @@ describe('BuyerOnboardingWizard', () => {
     const fd = createPlanActionMock.mock.calls[0]![1] as FormData;
     expect(fd.get('depositReceived')).toBe('true');
     expect(fd.get('depositMethod')).toBe('TRANSFER');
-    expect(fd.get('depositPaidAt')).toBe('2026-05-10');
+    expect(fd.get('depositPaidAt')).toBe(startDateValue);
     expect(fd.get('depositReference')).toBe('TX-77231');
     expect(fd.get('depositNotes')).toBe('Paid in branch');
+  });
+
+  test('deposit date input min attribute equals startDate (cannot backdate before plan start)', async () => {
+    const user = userEvent.setup();
+    render(<BuyerOnboardingWizard customers={customers} properties={properties} />);
+
+    await user.click(screen.getByLabelText(/search buyers/i));
+    await user.click(await screen.findByRole('option', { name: /tunde bakare/i }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+
+    await user.click(await screen.findByRole('option', { name: /cedar-12/i }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+
+    // Reveal the deposit date input by flipping the toggle on.
+    await user.click(screen.getByLabelText(/deposit received today/i));
+
+    const startDate = (
+      screen.getByLabelText(/first payment date/i) as HTMLInputElement
+    ).value;
+    const dateInput = screen.getByLabelText(/^date$/i);
+    // The deposit date input's lower bound mirrors startDate — backdating before
+    // the plan start would be rejected by the server (recordPayment refuses
+    // paidAt < plan.startDate), so the UI hints at it client-side.
+    expect(dateInput.getAttribute('min')).toBe(startDate);
+    // And specifically, `max` is NOT set to startDate (that would invert the constraint).
+    expect(dateInput.getAttribute('max')).toBeNull();
   });
 
   test('deposit toggle on with depositKobo=0: server-side validation rejection surfaces a banner', async () => {
