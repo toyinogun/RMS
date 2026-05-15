@@ -1,0 +1,33 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: solutio-pg
+  namespace: solutio-prod
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.3-standard-bookworm@sha256:d26af590b150163fb3706220c21485c64fb975132e76bc3e196521c17015b7e4
+  bootstrap:
+    initdb:
+      database: solutio
+      owner: solutio
+      postInitSQL:
+        - CREATE SCHEMA IF NOT EXISTS auth
+        - GRANT ALL ON SCHEMA auth TO solutio
+  storage:
+    size: 20Gi
+    storageClass: longhorn
+  monitoring:
+    enablePodMonitor: true
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  postgresql:
+    parameters:
+      max_connections: "100"
+      shared_buffers: 256MB
+  affinity:
+    podAntiAffinityType: preferred
