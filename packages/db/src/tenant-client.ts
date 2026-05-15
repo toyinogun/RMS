@@ -1,5 +1,9 @@
 import { PrismaClient } from '@prisma/client';
-import { prisma } from './client.js';
+// Extensionless import: Turbopack chokes on './client.js' (where the source
+// file is client.ts) when this module is reached from apps/web's import
+// graph, while vitest/tsx accept either form. Bundler resolution lets us
+// drop the extension and stay compatible with both.
+import { prisma } from './client';
 
 const TENANT_SCOPED_MODELS = [
   'User',
