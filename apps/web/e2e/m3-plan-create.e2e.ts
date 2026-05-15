@@ -19,7 +19,7 @@ test('M3: create DRAFT plan with materialized installments, then cancel', async 
   await expect(page).toHaveURL('/');
 
   // Create a customer for the plan.
-  await page.getByRole('link', { name: 'Customers' }).click();
+  await page.getByRole('link', { name: 'Customers', exact: true }).click();
   await page.getByRole('link', { name: 'New customer' }).click();
   await page.getByLabel(/full name/i).fill('M3 Customer');
   await page.getByLabel(/^phone/i).fill('+2348012345003');
@@ -28,7 +28,7 @@ test('M3: create DRAFT plan with materialized installments, then cancel', async 
   await expect(page.getByRole('link', { name: 'M3 Customer' })).toBeVisible();
 
   // Create an AVAILABLE property.
-  await page.getByRole('link', { name: 'Properties' }).click();
+  await page.getByRole('link', { name: 'Properties', exact: true }).click();
   await page.getByRole('link', { name: 'New property' }).click();
   await page.getByLabel(/^code/i).fill('M3-01');
   await page.getByLabel(/^title/i).fill('M3 property');
@@ -40,7 +40,7 @@ test('M3: create DRAFT plan with materialized installments, then cancel', async 
   await expect(page.getByRole('link', { name: 'M3-01' })).toBeVisible();
 
   // Create the plan.
-  await page.getByRole('link', { name: 'Plans' }).click();
+  await page.getByRole('link', { name: 'Plans', exact: true }).click();
   await expect(page).toHaveURL('/plans');
   await page.getByRole('link', { name: 'New plan' }).click();
   await expect(page).toHaveURL('/plans/new');
@@ -68,7 +68,7 @@ test('M3: create DRAFT plan with materialized installments, then cancel', async 
   await expect(rows.first()).toContainText('₦500,000');
 
   // Plan appears in /plans filtered by DRAFT.
-  await page.getByRole('link', { name: 'Plans' }).first().click();
+  await page.getByRole('link', { name: 'Plans', exact: true }).click();
   await expect(page).toHaveURL(/\/plans/);
   await page.getByLabel(/status/i).selectOption('DRAFT');
   await page.getByRole('button', { name: /apply/i }).click();
