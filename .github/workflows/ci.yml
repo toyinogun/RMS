@@ -43,11 +43,14 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Prisma client types are generated, not bundled — must exist before typecheck.
+      - run: pnpm --filter @solutio/db prisma:generate
       - run: pnpm typecheck
       - run: pnpm lint
-      - run: pnpm --filter @solutio/db prisma:generate
       - run: pnpm --filter @solutio/db prisma:validate
-      - run: pnpm --filter @solutio/db prisma:diff
+      # prisma:diff (AC #4) requires a shadow Postgres in Prisma 7 — it
+      # replays migrations onto a real DB to compute the diff. Run manually
+      # against `main` until a postgres service block is wired up here.
       - run: pnpm test --coverage.enabled --coverage.thresholds.lines=80 --coverage.thresholds.functions=80 --coverage.thresholds.branches=80 --coverage.thresholds.statements=80
       - name: Run integration tests
         run: pnpm test:integration

@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { prisma } from './client.js';
 
 const TENANT_SCOPED_MODELS = [
   'User',
@@ -85,3 +86,12 @@ function assertOrInjectTenantId(
 }
 
 export type TenantPrismaClient = ReturnType<typeof forTenant>;
+
+/**
+ * Returns a tenant-scoped Prisma client using the singleton raw client.
+ * Use this from app/business-logic code so callers never need to import
+ * the raw `prisma` symbol — keeps the apps/web boundary tight.
+ */
+export function getTenantDb(tenantId: string): TenantPrismaClient {
+  return forTenant(prisma, tenantId);
+}

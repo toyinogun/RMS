@@ -5,8 +5,7 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { auth } from '@/lib/auth';
 import { getTenantContext } from '@/lib/tenant-context';
-import { prisma } from '@solutio/db/client';
-import { forTenant } from '@solutio/db/tenant-client';
+import { getTenantDb } from '@solutio/db/tenant-client';
 
 const schema = z
   .object({
@@ -53,7 +52,7 @@ export async function changePasswordAction(
   // Better Auth's password update has already committed; if the flag
   // update below fails the user retries — their new password is already
   // valid for next login, so we never end up in a stuck state.
-  const db = forTenant(prisma, ctx.tenantId);
+  const db = getTenantDb(ctx.tenantId);
   await db.user.update({
     where: { id: ctx.user.id },
     data: { mustChangePassword: false },

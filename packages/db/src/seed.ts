@@ -70,8 +70,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.error('SEED_OWNER_EMAIL and SEED_OWNER_PASSWORD must be set.');
     process.exit(1);
   }
-  const { createSeedAuthAdapter } = await import('../../../apps/web/lib/auth.js')
-    .catch(() => ({ createSeedAuthAdapter: undefined }));
+  // Path stored in a variable so TypeScript treats this as a runtime-only import
+  // (Promise<any>) — apps/web is intentionally outside packages/db's rootDir;
+  // the auth adapter only needs to exist when the seed CLI runs.
+  const authModulePath = '../../../apps/web/lib/auth.js';
+  const authModule = (await import(authModulePath).catch(() => ({}))) as {
+    createSeedAuthAdapter?: () => SeedAuthAdapter;
+  };
+  const createSeedAuthAdapter = authModule.createSeedAuthAdapter;
   if (!createSeedAuthAdapter) {
     console.error('apps/web auth module not built. Run pnpm --filter @solutio/web build first.');
     process.exit(1);
