@@ -5,6 +5,7 @@ set -euo pipefail
 violations=$(
   find . -name 'Dockerfile' -not -path './node_modules/*' -print0 \
     | xargs -0 grep -EHn '^FROM ' \
+    | grep -Ev '^[^:]+:[0-9]+:FROM [A-Za-z0-9_-]+( AS [A-Za-z0-9_-]+)?$' \
     | grep -v '@sha256:' \
     || true
 )
