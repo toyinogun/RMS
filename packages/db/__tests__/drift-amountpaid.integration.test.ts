@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import { startPostgres, type TestPostgres } from './_helpers/postgres.js';
-import { recordPayment } from '../src/payments-service.js';
+import { recordPayment, PaymentOverpayError } from '../src/payments-service.js';
 import { generateSchedule } from '@solutio/shared/installments';
 import { koboFromNaira } from '@solutio/shared/money';
 import type { Kobo } from '@solutio/shared/money';
@@ -118,43 +118,46 @@ async function assertNoDrift() {
 
 describe('amountPaidKobo denormalization drift', () => {
   test('single payment exactly covering deposit', async () => {
-    await recordPayment(pg.prisma, ctx(), {
+    await recordPayment(ctx(), {
       planId,
       amountKobo: koboFromNaira(2_400_000) as Kobo,
-      paidAt: new Date(),
+      paidAt: new Date('2026-06-01T10:00:00Z'),
       method: 'TRANSFER',
     });
     await assertNoDrift();
   });
 
   test('payment spanning deposit + first two monthlies', async () => {
-    await recordPayment(pg.prisma, ctx(), {
+    await recordPayment(ctx(), {
       planId,
       amountKobo: koboFromNaira(4_000_000) as Kobo,
-      paidAt: new Date(),
+      paidAt: new Date('2026-06-01T10:00:00Z'),
       method: 'TRANSFER',
     });
     await assertNoDrift();
   });
 
-  test('overpayment leaves remainder; no drift', async () => {
-    const result = await recordPayment(pg.prisma, ctx(), {
-      planId,
-      amountKobo: koboFromNaira(20_000_000) as Kobo,
-      paidAt: new Date(),
-      method: 'CHEQUE',
-      reference: 'CHQ-001',
-    });
-    expect(result.remainderKobo).toBe(koboFromNaira(8_000_000));
+  test('overpayment is hard-rejected; no allocations or payment row persisted', async () => {
+    await expect(
+      recordPayment(ctx(), {
+        planId,
+        amountKobo: koboFromNaira(20_000_000) as Kobo,
+        paidAt: new Date('2026-06-01T10:00:00Z'),
+        method: 'CHEQUE',
+        reference: 'CHQ-001',
+      }),
+    ).rejects.toBeInstanceOf(PaymentOverpayError);
+    const paymentCount = await pg.prisma.payment.count({ where: { planId } });
+    expect(paymentCount).toBe(0);
     await assertNoDrift();
   });
 
   test('many small payments — every installment touched', async () => {
     for (let i = 0; i < 13; i++) {
-      await recordPayment(pg.prisma, ctx(), {
+      await recordPayment(ctx(), {
         planId,
         amountKobo: koboFromNaira(900_000) as Kobo,
-        paidAt: new Date(),
+        paidAt: new Date('2026-06-01T10:00:00Z'),
         method: 'CASH',
       });
     }

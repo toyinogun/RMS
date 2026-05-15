@@ -1,100 +1,327 @@
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import type { PlanStatus } from '@prisma/client';
 import { allocatePayment } from '@solutio/shared/payments';
+import type { PaymentRecordInput } from '@solutio/shared/payments';
 import type { Kobo } from '@solutio/shared/money';
 import type { TenantContext } from '@solutio/shared/tenant';
 import { deriveInstallmentStatus } from '@solutio/shared/installments';
 import { forTenant } from './tenant-client';
+import { prisma } from './client';
+import { PlanNotFoundError, PropertyNotAvailableError } from './plans-service';
 
-export type RecordPaymentInput = {
-  planId: string;
-  amountKobo: Kobo;
-  paidAt: Date;
-  method: 'CASH' | 'TRANSFER' | 'CHEQUE' | 'CARD_MANUAL' | 'OTHER';
-  reference?: string;
-  notes?: string;
+export { PlanNotFoundError, PropertyNotAvailableError };
+
+/**
+ * The plan was found but it's not in a state that accepts new payments.
+ * Currently blocks COMPLETED, CANCELLED, DEFAULTED. DRAFT and ACTIVE are accepted.
+ */
+export class PlanNotPayableError extends Error {
+  static readonly code = 'PLAN_NOT_PAYABLE' as const;
+  readonly code = PlanNotPayableError.code;
+  constructor(planId: string, status: PlanStatus) {
+    super(`Plan ${planId} is not payable (status: ${status})`);
+    this.name = 'PlanNotPayableError';
+  }
+}
+
+/**
+ * paidAt is earlier than the plan's startDate.
+ */
+export class PaymentBeforePlanStartError extends Error {
+  static readonly code = 'PAYMENT_BEFORE_PLAN_START' as const;
+  readonly code = PaymentBeforePlanStartError.code;
+  constructor(paidAt: Date, startDate: Date) {
+    super(
+      `Payment date ${paidAt.toISOString()} is before plan start date ${startDate.toISOString()}`,
+    );
+    this.name = 'PaymentBeforePlanStartError';
+  }
+}
+
+/**
+ * FIFO allocation produced a non-zero remainder — i.e. the caller paid more
+ * than the plan's outstanding balance. M4 hard-rejects overpayments instead
+ * of silently keeping the change as a credit.
+ */
+export class PaymentOverpayError extends Error {
+  static readonly code = 'PAYMENT_OVERPAY' as const;
+  readonly code = PaymentOverpayError.code;
+  readonly overpayKobo: Kobo;
+  constructor(overpayKobo: Kobo) {
+    super(`Payment exceeds plan outstanding by ${overpayKobo} kobo`);
+    this.name = 'PaymentOverpayError';
+    this.overpayKobo = overpayKobo;
+  }
+}
+
+/**
+ * Manual allocation references an installmentId that doesn't belong to the
+ * plan (or doesn't exist in the caller's tenant scope).
+ */
+export class AllocationInstallmentNotFoundError extends Error {
+  static readonly code = 'ALLOCATION_INSTALLMENT_NOT_FOUND' as const;
+  readonly code = AllocationInstallmentNotFoundError.code;
+  constructor(installmentId: string) {
+    super(`Allocation references unknown installment ${installmentId}`);
+    this.name = 'AllocationInstallmentNotFoundError';
+  }
+}
+
+/**
+ * Manual allocation tries to credit an installment that is already PAID.
+ */
+export class AllocationAgainstPaidInstallmentError extends Error {
+  static readonly code = 'ALLOCATION_AGAINST_PAID_INSTALLMENT' as const;
+  readonly code = AllocationAgainstPaidInstallmentError.code;
+  readonly sequenceNo: number;
+  constructor(sequenceNo: number) {
+    super(`Installment #${sequenceNo} is already paid`);
+    this.name = 'AllocationAgainstPaidInstallmentError';
+    this.sequenceNo = sequenceNo;
+  }
+}
+
+/**
+ * Manual allocation row amount exceeds the installment's outstanding balance.
+ */
+export class AllocationExceedsOutstandingError extends Error {
+  static readonly code = 'ALLOCATION_EXCEEDS_OUTSTANDING' as const;
+  readonly code = AllocationExceedsOutstandingError.code;
+  readonly sequenceNo: number;
+  constructor(sequenceNo: number) {
+    super(`Allocation for installment #${sequenceNo} exceeds outstanding balance`);
+    this.name = 'AllocationExceedsOutstandingError';
+    this.sequenceNo = sequenceNo;
+  }
+}
+
+/**
+ * SERIALIZABLE transaction lost a write race (Postgres SQLSTATE 40001 →
+ * Prisma P2034). The action layer should retry once before surfacing.
+ */
+export class PaymentRetryableSerializationError extends Error {
+  static readonly code = 'PAYMENT_RETRYABLE_SERIALIZATION' as const;
+  readonly code = PaymentRetryableSerializationError.code;
+  constructor() {
+    super('Payment transaction failed due to serialization conflict — retry');
+    this.name = 'PaymentRetryableSerializationError';
+  }
+}
+
+export type { PaymentRecordInput };
+
+export type RecordPaymentResult = {
+  paymentId: string;
+  planStatus: PlanStatus;
+  remainderKobo: Kobo;
 };
 
 /**
- * Service function — records a Payment, computes allocations across the Plan's
- * outstanding installments, persists them, updates the denormalized
- * Installment.amountPaidKobo running total, and refreshes Installment.status.
- * All writes happen in a single SERIALIZABLE transaction.
+ * Compare two dates by calendar day (UTC). `startDate` is a `@db.Date` column
+ * so it always lands at 00:00:00 UTC, while `paidAt` is a `DateTime` and may
+ * carry a wall-clock time. We reject when the paid day is strictly before the
+ * start day — a payment recorded at any time on the start day is acceptable.
+ */
+function isPaidAtBeforeStart(paidAt: Date, startDate: Date): boolean {
+  const paidDay = Date.UTC(
+    paidAt.getUTCFullYear(),
+    paidAt.getUTCMonth(),
+    paidAt.getUTCDate(),
+  );
+  const startDay = Date.UTC(
+    startDate.getUTCFullYear(),
+    startDate.getUTCMonth(),
+    startDate.getUTCDate(),
+  );
+  return paidDay < startDay;
+}
+
+/**
+ * Service function — records a Payment against a Plan and applies the M4
+ * invariants:
+ *   • DRAFT plan + first payment → plan ACTIVE, property AVAILABLE → SOLD
+ *     (idempotent: property already SOLD/RESERVED is left alone).
+ *   • If every installment is fully paid after this payment → plan COMPLETED.
+ *   • COMPLETED / CANCELLED / DEFAULTED plans reject all new payments.
+ *   • paidAt before startDate is rejected.
+ *   • FIFO allocation runs when no explicit allocations[] is provided.
+ *     Overpayments (remainder > 0) are hard-rejected.
+ *   • Manual allocations[] are validated for membership, paid-state, and
+ *     outstanding bounds.
  *
- * Note: Prisma 7 with adapter-pg supports SERIALIZABLE isolation level via
- * the $transaction options. If the adapter does not support it at runtime,
- * this will throw and must be caught by the caller.
+ * All writes happen in a single SERIALIZABLE transaction. Loss of the write
+ * race surfaces as PaymentRetryableSerializationError so the caller can retry.
  */
 export async function recordPayment(
-  prisma: PrismaClient,
   ctx: TenantContext,
-  input: RecordPaymentInput,
-) {
-  // Apply tenant scoping before the transaction so the extended client's
-  // $transaction propagates the extension into the interactive tx callback.
-  // This is necessary because Prisma's interactive transaction client does not
-  // expose $extends — only a fully-constructed PrismaClient does.
+  input: PaymentRecordInput,
+): Promise<RecordPaymentResult> {
   const scoped = forTenant(prisma, ctx.tenantId);
 
-  return scoped.$transaction(
-    async (tx) => {
-      const installments = await tx.installment.findMany({
-        where: { planId: input.planId },
-        orderBy: { sequenceNo: 'asc' },
-      });
+  try {
+    return await scoped.$transaction(
+      async (tx) => {
+        const plan = await tx.plan.findUnique({
+          where: { id: input.planId },
+          include: {
+            installments: { orderBy: { sequenceNo: 'asc' } },
+            property: true,
+          },
+        });
+        if (!plan || plan.deletedAt !== null) throw new PlanNotFoundError(input.planId);
+        if (
+          plan.status === 'COMPLETED' ||
+          plan.status === 'CANCELLED' ||
+          plan.status === 'DEFAULTED'
+        ) {
+          throw new PlanNotPayableError(plan.id, plan.status);
+        }
+        if (isPaidAtBeforeStart(input.paidAt, plan.startDate)) {
+          throw new PaymentBeforePlanStartError(input.paidAt, plan.startDate);
+        }
 
-      const result = allocatePayment(
-        input.amountKobo,
-        installments.map((i) => ({
+        // Determine the allocation list: either compute FIFO, or validate the
+        // caller-supplied rows. Either way, end with a normalized list of
+        // { installmentId, amountKobo }.
+        type AllocationRow = { installmentId: string; amountKobo: Kobo };
+        let allocations: AllocationRow[];
+
+        if (input.allocations === undefined) {
+          const result = allocatePayment(
+            input.amountKobo,
+            plan.installments.map((i) => ({
+              id: i.id,
+              sequenceNo: i.sequenceNo,
+              amountDueKobo: i.amountDueKobo as Kobo,
+              amountPaidKobo: i.amountPaidKobo as Kobo,
+            })),
+          );
+          if (result.remainderKobo > 0n) {
+            throw new PaymentOverpayError(result.remainderKobo);
+          }
+          allocations = result.allocations.map((a) => ({
+            installmentId: a.installmentId,
+            amountKobo: a.amountKobo,
+          }));
+        } else {
+          const byId = new Map(plan.installments.map((i) => [i.id, i]));
+          for (const row of input.allocations) {
+            const inst = byId.get(row.installmentId);
+            if (!inst) throw new AllocationInstallmentNotFoundError(row.installmentId);
+            if (inst.status === 'PAID') {
+              throw new AllocationAgainstPaidInstallmentError(inst.sequenceNo);
+            }
+            const newPaid = (inst.amountPaidKobo as Kobo) + row.amountKobo;
+            if (newPaid > (inst.amountDueKobo as Kobo)) {
+              throw new AllocationExceedsOutstandingError(inst.sequenceNo);
+            }
+          }
+          allocations = input.allocations.map((a) => ({
+            installmentId: a.installmentId,
+            amountKobo: a.amountKobo,
+          }));
+        }
+
+        const paymentData = {
+          planId: input.planId,
+          amountKobo: input.amountKobo,
+          paidAt: input.paidAt,
+          method: input.method,
+          reference: input.reference ?? null,
+          notes: input.notes ?? null,
+          recordedBy: ctx.user.id,
+        } satisfies Omit<Prisma.PaymentUncheckedCreateInput, 'tenantId'>;
+        const payment = await tx.payment.create({
+          data: paymentData as unknown as Prisma.PaymentUncheckedCreateInput,
+        });
+
+        // Build a local copy of installment state so we can both compute the
+        // post-payment status (DRAFT→ACTIVE→COMPLETED in one shot) and feed
+        // deriveInstallmentStatus the right currentStatus for each row.
+        const installmentState = plan.installments.map((i) => ({
           id: i.id,
           sequenceNo: i.sequenceNo,
           amountDueKobo: i.amountDueKobo as Kobo,
           amountPaidKobo: i.amountPaidKobo as Kobo,
-        })),
-      );
+          dueDate: i.dueDate,
+          status: i.status,
+        }));
+        const stateById = new Map(installmentState.map((i) => [i.id, i]));
 
-      // tenantId is injected at runtime by forTenant()'s $extends query hook,
-      // but Prisma's generated input types don't reflect that. Shape is still
-      // checked via `satisfies` against Omit<..., 'tenantId'>.
-      const paymentData = {
-        planId: input.planId,
-        amountKobo: input.amountKobo,
-        paidAt: input.paidAt,
-        method: input.method,
-        reference: input.reference ?? null,
-        notes: input.notes ?? null,
-        recordedBy: ctx.user.id,
-      } satisfies Omit<Prisma.PaymentUncheckedCreateInput, 'tenantId'>;
-      const payment = await tx.payment.create({
-        data: paymentData as unknown as Prisma.PaymentUncheckedCreateInput,
-      });
+        const today = new Date();
+        for (const alloc of allocations) {
+          const allocData = {
+            paymentId: payment.id,
+            installmentId: alloc.installmentId,
+            amountKobo: alloc.amountKobo,
+          } satisfies Omit<Prisma.PaymentAllocationUncheckedCreateInput, 'tenantId'>;
+          await tx.paymentAllocation.create({
+            data: allocData as unknown as Prisma.PaymentAllocationUncheckedCreateInput,
+          });
+          const inst = stateById.get(alloc.installmentId)!;
+          const newPaid = (inst.amountPaidKobo + alloc.amountKobo) as Kobo;
+          const newStatus = deriveInstallmentStatus({
+            amountDueKobo: inst.amountDueKobo,
+            amountPaidKobo: newPaid,
+            dueDate: inst.dueDate,
+            currentStatus: inst.status,
+            today,
+          });
+          await tx.installment.update({
+            where: { id: alloc.installmentId },
+            data: { amountPaidKobo: newPaid, status: newStatus },
+          });
+          inst.amountPaidKobo = newPaid;
+          inst.status = newStatus;
+        }
 
-      const today = new Date();
-      for (const alloc of result.allocations) {
-        const allocData = {
+        // Plan + property state transitions.
+        let nextStatus: PlanStatus = plan.status;
+
+        if (plan.status === 'DRAFT') {
+          await tx.plan.update({
+            where: { id: plan.id },
+            data: { status: 'ACTIVE' },
+          });
+          nextStatus = 'ACTIVE';
+          // Property auto-flip is idempotent: only write if AVAILABLE.
+          if (plan.property.status === 'AVAILABLE') {
+            await tx.property.update({
+              where: { id: plan.propertyId },
+              data: { status: 'SOLD' },
+            });
+          }
+        }
+
+        const allPaid = installmentState.every(
+          (i) => i.amountPaidKobo >= i.amountDueKobo,
+        );
+        if (allPaid) {
+          await tx.plan.update({
+            where: { id: plan.id },
+            data: { status: 'COMPLETED' },
+          });
+          nextStatus = 'COMPLETED';
+        }
+
+        return {
           paymentId: payment.id,
-          installmentId: alloc.installmentId,
-          amountKobo: alloc.amountKobo,
-        } satisfies Omit<Prisma.PaymentAllocationUncheckedCreateInput, 'tenantId'>;
-        await tx.paymentAllocation.create({
-          data: allocData as unknown as Prisma.PaymentAllocationUncheckedCreateInput,
-        });
-        const inst = installments.find((i) => i.id === alloc.installmentId)!;
-        const newPaid = (inst.amountPaidKobo + alloc.amountKobo) as Kobo;
-        const newStatus = deriveInstallmentStatus({
-          amountDueKobo: inst.amountDueKobo as Kobo,
-          amountPaidKobo: newPaid,
-          dueDate: inst.dueDate,
-          currentStatus: inst.status,
-          today,
-        });
-        await tx.installment.update({
-          where: { id: alloc.installmentId },
-          data: { amountPaidKobo: newPaid, status: newStatus },
-        });
-      }
-
-      return { payment, allocations: result.allocations, remainderKobo: result.remainderKobo };
-    },
-    { isolationLevel: 'Serializable' },
-  );
+          planStatus: nextStatus,
+          remainderKobo: 0n as Kobo,
+        };
+      },
+      { isolationLevel: 'Serializable' },
+    );
+  } catch (err) {
+    // Postgres SQLSTATE 40001 (serialization_failure) surfaces from
+    // Prisma as P2034 ("Transaction failed due to a write conflict or a
+    // deadlock"). Re-wrap so the action layer can decide whether to retry.
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2034'
+    ) {
+      throw new PaymentRetryableSerializationError();
+    }
+    throw err;
+  }
 }
