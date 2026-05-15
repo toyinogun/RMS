@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
-# Fails if any package.json under apps/ or packages/ uses caret or tilde.
+# Fails if any git-tracked package.json uses caret or tilde version specifiers.
 set -euo pipefail
 
+files=$(git ls-files -- 'package.json' '**/package.json' 2>/dev/null || true)
+
+if [[ -z "$files" ]]; then
+  echo "PASS: no caret or tilde in any package.json"
+  exit 0
+fi
+
 violations=$(
-  grep -rEn '"\s*[\^~]' \
-    --include='package.json' \
-    apps packages package.json 2>/dev/null \
+  echo "$files" \
+    | xargs grep -EnH '"\s*[\^~]' 2>/dev/null \
     | grep -v '"version":' || true
 )
 

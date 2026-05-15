@@ -8,6 +8,16 @@ B2B SaaS for tracking property installment payment plans for Nigerian real estat
 
 To be completed in Task 45.
 
+### One-time hook setup
+
+After cloning:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The hook runs `scripts/check-no-unsealed-secret.sh` and `scripts/check-no-caret.sh` before every commit.
+
 ## Deploy
 
 To be completed in Task 45.

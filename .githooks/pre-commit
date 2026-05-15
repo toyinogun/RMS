@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+bash scripts/check-no-unsealed-secret.sh
+bash scripts/check-no-caret.sh
