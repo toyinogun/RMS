@@ -96,9 +96,13 @@ describe('planCreateSchema', () => {
   });
 
   test('rejects depositReceived: true with zero deposit', () => {
+    // Bump monthlyNgn so deposit (0) + monthly × term ≥ total — otherwise the underfunded
+    // refine also fires and the assertion below becomes fragile (multi-issue match).
+    // 210,000 × 24 = 5,040,000 ≥ 5,000,000 (total).
     const res = planCreateSchema.safeParse({
       ...baseExistingCustomerInput(),
       depositNgn: '0',
+      monthlyNgn: '210,000',
       depositReceived: true,
       depositMethod: 'CASH',
     });
@@ -146,6 +150,21 @@ describe('planCreateSchema', () => {
     expect(parsed.depositPaidAt).toBeInstanceOf(Date);
     expect(parsed.depositPaidAt?.toISOString().slice(0, 10)).toBe(today);
     expect(parsed.depositPaidAt?.getTime()).not.toBe(parsed.startDate.getTime());
+  });
+
+  test('rejects depositPaidAt more than 1 day in the future', () => {
+    const future = new Date();
+    future.setUTCDate(future.getUTCDate() + 3);
+    const res = planCreateSchema.safeParse({
+      ...baseExistingCustomerInput(),
+      depositReceived: true,
+      depositMethod: 'CASH',
+      depositPaidAt: future.toISOString().slice(0, 10),
+    });
+    expect(res.success).toBe(false);
+    if (!res.success) {
+      expect(res.error.issues.some((i) => /future/i.test(i.message))).toBe(true);
+    }
   });
 
   test('accepts every payment method value via depositMethod', () => {

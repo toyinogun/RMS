@@ -8,7 +8,7 @@ const NOTES_MAX = 500;
 export const paymentMethodSchema = z.enum(['CASH', 'TRANSFER', 'CHEQUE', 'CARD_MANUAL', 'OTHER']);
 export type PaymentMethod = z.infer<typeof paymentMethodSchema>;
 
-const paidAtSchema = z
+export const paidAtSchema = z
   .string()
   .trim()
   .min(1, 'Payment date is required')

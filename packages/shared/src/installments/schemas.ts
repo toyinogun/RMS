@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ngnAmount } from '../money/zod';
-import { optionalTrimmed, paymentMethodSchema } from '../payments/schemas';
+import { optionalTrimmed, paidAtSchema, paymentMethodSchema } from '../payments/schemas';
 
 const MIN_TERM = 6;
 const MAX_TERM = 36;
@@ -28,7 +28,6 @@ const pastTolerantDateSchema = (label: string) =>
     });
 
 const startDateSchema = pastTolerantDateSchema('Start date');
-const depositPaidAtSchema = pastTolerantDateSchema('Deposit paid date');
 
 const customerExistingSchema = z.object({
   mode: z.literal('existing'),
@@ -80,7 +79,7 @@ const planCoreFields = z.object({
   depositReceived: z.boolean().default(false),
   // M4 deposit-at-creation subfields — only consumed when depositReceived === true.
   depositMethod: paymentMethodSchema.optional(),
-  depositPaidAt: depositPaidAtSchema.optional(),
+  depositPaidAt: paidAtSchema.optional(),
   depositReference: optionalTrimmed('Reference', DEPOSIT_REFERENCE_MAX),
   depositNotes: optionalTrimmed('Notes', DEPOSIT_NOTES_MAX),
 });
