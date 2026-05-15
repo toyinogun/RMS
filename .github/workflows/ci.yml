@@ -28,11 +28,29 @@ jobs:
     name: Lint + typecheck + test
     runs-on: ubuntu-latest
     needs: guards
+    services:
+      # Shadow Postgres used by `prisma migrate diff --from-migrations` to
+      # replay migrations and compute the schema diff. SHA-pinned to the same
+      # Postgres digest as testcontainers + local dev.
+      postgres:
+        image: postgres:18.3-bookworm@sha256:80630f83606d8db77d30b3851b16a9f78be2d0d4dda6f7b82a1fdca5ebe3acba
+        env:
+          POSTGRES_USER: solutio
+          POSTGRES_PASSWORD: solutio
+          POSTGRES_DB: solutio
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U solutio -d solutio"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     env:
       # Prisma 7's prisma.config.ts evaluates env('DATABASE_URL') eagerly at
       # config-load, even for `prisma generate` / `prisma validate` which do
       # not connect. The value just needs to be a parseable URL.
-      DATABASE_URL: postgresql://build:build@localhost:5432/build?schema=public
+      DATABASE_URL: postgresql://solutio:solutio@localhost:5432/solutio?schema=public
+      SHADOW_DATABASE_URL: postgresql://solutio:solutio@localhost:5432/shadow?schema=public
       # `pnpm test` runs the integration project too — testcontainers needs
       # ryuk disabled when run inside ephemeral CI runners.
       TESTCONTAINERS_RYUK_DISABLED: "true"
@@ -51,9 +69,11 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm --filter @solutio/db prisma:validate
-      # prisma:diff (AC #4) requires a shadow Postgres in Prisma 7 — it
-      # replays migrations onto a real DB to compute the diff. Run manually
-      # against `main` until a postgres service block is wired up here.
+      # AC #4 — drift check between prisma/migrations and schema.prisma.
+      # Replays migrations onto the shadow Postgres service.
+      - name: Create shadow database
+        run: PGPASSWORD=solutio psql -h localhost -U solutio -d solutio -c 'CREATE DATABASE shadow;'
+      - run: pnpm --filter @solutio/db prisma:diff
       # `pnpm test` runs all projects including integration (which spins up
       # testcontainers Postgres). The dedicated `pnpm test:integration` step
       # from the original plan is dropped — it would re-run integration
