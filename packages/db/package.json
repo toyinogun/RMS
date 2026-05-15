@@ -10,7 +10,8 @@
     "./tenant-client": "./src/tenant-client.ts",
     "./seed": "./src/seed.ts",
     "./customers-service": "./src/customers-service.ts",
-    "./properties-service": "./src/properties-service.ts"
+    "./properties-service": "./src/properties-service.ts",
+    "./plans-service": "./src/plans-service.ts"
   },
   "scripts": {
     "prisma:generate": "prisma generate",

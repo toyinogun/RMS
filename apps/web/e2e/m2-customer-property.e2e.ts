@@ -41,7 +41,7 @@ test('M2: customer + property CRUD happy path', async ({ page }) => {
   // ------------------------------------------------------------------ //
   // 2. Navigate to Customers, create a new customer                     //
   // ------------------------------------------------------------------ //
-  await page.getByRole('link', { name: 'Customers' }).click();
+  await page.getByRole('link', { name: 'Customers', exact: true }).click();
   await expect(page).toHaveURL('/customers');
   await expect(page.getByRole('heading', { name: 'Customers' })).toBeVisible();
 
@@ -91,7 +91,7 @@ test('M2: customer + property CRUD happy path', async ({ page }) => {
   // ------------------------------------------------------------------ //
   // 7. Navigate to Properties, create a new property                   //
   // ------------------------------------------------------------------ //
-  await page.getByRole('link', { name: 'Properties' }).click();
+  await page.getByRole('link', { name: 'Properties', exact: true }).click();
   await expect(page).toHaveURL('/properties');
   await expect(page.getByRole('heading', { name: 'Properties' })).toBeVisible();
 
@@ -139,7 +139,7 @@ test('M2: customer + property CRUD happy path', async ({ page }) => {
   // ------------------------------------------------------------------ //
   // 10. Delete the customer (no plans — deletion should succeed)        //
   // ------------------------------------------------------------------ //
-  await page.getByRole('link', { name: 'Customers' }).click();
+  await page.getByRole('link', { name: 'Customers', exact: true }).click();
   await expect(page).toHaveURL('/customers');
 
   await page.getByRole('link', { name: 'E2E Customer' }).click();
@@ -155,7 +155,7 @@ test('M2: customer + property CRUD happy path', async ({ page }) => {
   // ------------------------------------------------------------------ //
   // 11. Delete the property                                             //
   // ------------------------------------------------------------------ //
-  await page.getByRole('link', { name: 'Properties' }).click();
+  await page.getByRole('link', { name: 'Properties', exact: true }).click();
   await expect(page).toHaveURL('/properties');
 
   await page.getByRole('link', { name: 'E2E-01' }).click();

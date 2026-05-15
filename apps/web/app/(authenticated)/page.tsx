@@ -15,7 +15,7 @@ export default async function HomePage() {
         Signed in as <span className="font-medium">{ctx.user.email}</span> ({ctx.user.role}).
       </p>
 
-      <div className="mt-8 grid grid-cols-2 gap-4">
+      <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Link
           href={'/customers' as Route}
           className="rounded border border-slate-200 p-4 hover:border-slate-300 hover:bg-slate-50 transition"
@@ -29,6 +29,13 @@ export default async function HomePage() {
         >
           <h2 className="font-semibold text-slate-900">Properties</h2>
           <p className="mt-1 text-sm text-slate-600">Manage property listings</p>
+        </Link>
+        <Link
+          href={'/plans' as Route}
+          className="rounded border border-slate-200 p-4 hover:border-slate-300 hover:bg-slate-50 transition"
+        >
+          <h2 className="font-semibold text-slate-900">Plans</h2>
+          <p className="mt-1 text-sm text-slate-600">Create and track installment plans</p>
         </Link>
       </div>
 
