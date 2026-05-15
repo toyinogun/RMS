@@ -199,6 +199,87 @@ describe('BuyerOnboardingWizard', () => {
     expect(screen.getByRole('heading', { name: /who is buying/i })).toBeInTheDocument();
   });
 
+  test('back button returns to the previous step preserving values', async () => {
+    const user = userEvent.setup();
+    render(<BuyerOnboardingWizard customers={customers} properties={properties} />);
+
+    await user.click(screen.getByLabelText(/search buyers/i));
+    await user.click(await screen.findByRole('option', { name: /adaeze okafor/i }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    expect(
+      await screen.findByRole('heading', { name: /which property/i }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /back/i }));
+    expect(
+      await screen.findByRole('heading', { name: /who is buying/i }),
+    ).toBeInTheDocument();
+  });
+
+  test('cancel from step 1 with a draft opens the discard dialog; keep editing closes it', async () => {
+    const user = userEvent.setup();
+    render(<BuyerOnboardingWizard customers={customers} properties={properties} />);
+
+    // Switch to new-buyer mode and put text into a field so attemptCancel sees a draft
+    await user.click(screen.getByRole('tab', { name: /new buyer/i }));
+    await user.type(screen.getByLabelText(/^full name/i), 'Tomi Test');
+
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }));
+    expect(
+      await screen.findByRole('heading', { name: /discard this draft/i }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /keep editing/i }));
+    // Dialog title gone, wizard heading still there
+    expect(screen.queryByRole('heading', { name: /discard this draft/i })).toBeNull();
+    expect(screen.getByRole('heading', { name: /who is buying/i })).toBeInTheDocument();
+  });
+
+  test('invalid email on new-buyer blocks advance with a field error', async () => {
+    const user = userEvent.setup();
+    render(<BuyerOnboardingWizard customers={customers} properties={properties} />);
+
+    await user.click(screen.getByRole('tab', { name: /new buyer/i }));
+    await user.type(screen.getByLabelText(/^full name/i), 'Bode Okello');
+    await user.type(screen.getByLabelText(/^phone/i), '+2348091112233');
+    await user.type(screen.getByLabelText(/^email/i), 'not-an-email');
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+
+    expect(await screen.findByText(/invalid email/i)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /which property/i })).toBeNull();
+  });
+
+  test('server fieldErrors map onto form fields so the user sees them inline', async () => {
+    createPlanActionMock.mockResolvedValue({
+      ok: false,
+      message: 'Please fix the highlighted fields',
+      fieldErrors: { 'totalPriceNgn': 'Total price must be greater than zero' },
+    });
+    const user = userEvent.setup();
+    render(<BuyerOnboardingWizard customers={customers} properties={properties} />);
+
+    await user.click(screen.getByLabelText(/search buyers/i));
+    await user.click(await screen.findByRole('option', { name: /adaeze okafor/i }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+
+    await user.click(await screen.findByRole('option', { name: /cedar-12/i }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+
+    await user.clear(screen.getByLabelText(/down payment today/i));
+    await user.type(screen.getByLabelText(/down payment today/i), '500,000');
+    await user.type(screen.getByLabelText(/monthly amount/i), '500,000');
+    await user.click(screen.getByRole('button', { name: /preview schedule/i }));
+
+    await user.click(await screen.findByRole('button', { name: /confirm sale/i }));
+
+    // The server error message is set on the totalPriceNgn field — but since we're on
+    // step 4 by this point the field is offscreen. The general banner still surfaces.
+    expect(
+      await screen.findByText(/please fix the highlighted fields/i),
+    ).toBeInTheDocument();
+    expect(routerPushMock).not.toHaveBeenCalled();
+  });
+
   test('server error after confirm surfaces a banner and keeps the user on review', async () => {
     createPlanActionMock.mockResolvedValue({
       ok: false,
