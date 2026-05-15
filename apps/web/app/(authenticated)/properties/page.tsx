@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { Route } from 'next';
 import { getTenantContext } from '@/lib/tenant-context';
-import { prisma } from '@solutio/db/client';
 import { listProperties } from '@solutio/db/properties-service';
 import { formatKobo, type Kobo } from '@solutio/shared/money';
 import { Badge } from '@/components/ui/badge';
@@ -51,7 +50,7 @@ export default async function PropertiesPage({
   const { q, status } = await searchParams;
   const validStatus =
     status === 'AVAILABLE' || status === 'RESERVED' || status === 'SOLD' ? status : undefined;
-  const properties = await listProperties(prisma, ctx, { search: q, status: validStatus });
+  const properties = await listProperties(ctx, { search: q, status: validStatus });
 
   return (
     <section className="space-y-4">

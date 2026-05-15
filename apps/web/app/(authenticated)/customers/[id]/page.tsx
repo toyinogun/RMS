@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import type { Route } from 'next';
 import { getTenantContext } from '@/lib/tenant-context';
-import { prisma } from '@solutio/db/client';
 import { getCustomer } from '@solutio/db/customers-service';
 import { formatKobo, type Kobo } from '@solutio/shared/money';
 import { Badge } from '@/components/ui/badge';
@@ -20,7 +19,7 @@ export default async function CustomerDetailPage({
   if (!ctx) redirect('/login');
 
   const { id } = await params;
-  const customer = await getCustomer(prisma, ctx, id);
+  const customer = await getCustomer(ctx, id);
   if (!customer) notFound();
 
   return (

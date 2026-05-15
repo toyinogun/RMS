@@ -1,15 +1,14 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { z } from 'zod';
+import type { ZodError } from 'zod';
 import { propertyUpdateSchema } from '@solutio/shared/properties';
-import { prisma } from '@solutio/db/client';
 import { updateProperty, PropertyNotFoundError, PropertyCodeConflictError } from '@solutio/db/properties-service';
 import { getTenantContext } from '@/lib/tenant-context';
 import { hasRole } from '@solutio/shared/tenant';
 import type { PropertyActionState } from './create';
 
-function flattenZod(err: z.ZodError): Record<string, string> {
+function flattenZod(err: ZodError): Record<string, string> {
   const out: Record<string, string> = {};
   for (const issue of err.issues) {
     const path = issue.path.join('.');
@@ -39,7 +38,7 @@ export async function updatePropertyAction(
   }
 
   try {
-    const updated = await updateProperty(prisma, ctx, parsed.data);
+    const updated = await updateProperty(ctx, parsed.data);
     revalidatePath('/properties');
     revalidatePath(`/properties/${updated.id}`);
     return { ok: true, data: { id: updated.id } };

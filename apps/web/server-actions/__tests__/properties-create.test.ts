@@ -124,12 +124,11 @@ describe('createPropertyAction', () => {
     expect(revalidatePathMock).toHaveBeenCalledWith('/properties');
   });
 
-  test('calls createProperty with prisma, ctx, and parsed data', async () => {
+  test('calls createProperty with ctx and parsed data', async () => {
     getTenantContextMock.mockResolvedValue(validCtx);
     createPropertyMock.mockResolvedValue({ id: 'prop-abc' } as never);
     await createPropertyAction(null, validFormData());
     expect(createPropertyMock).toHaveBeenCalledWith(
-      {},
       validCtx,
       expect.objectContaining({ code: 'PROP001', title: 'Beautiful Villa', city: 'Abuja' }),
     );

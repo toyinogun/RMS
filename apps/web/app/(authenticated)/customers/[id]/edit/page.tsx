@@ -2,7 +2,6 @@ import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import type { Route } from 'next';
 import { getTenantContext } from '@/lib/tenant-context';
-import { prisma } from '@solutio/db/client';
 import { getCustomer } from '@solutio/db/customers-service';
 import { CustomerForm } from '@/components/customers/customer-form';
 import { updateCustomerAction } from '@/server-actions/customers/update';
@@ -19,7 +18,7 @@ export default async function EditCustomerPage({
   if (!ctx) redirect('/login');
 
   const { id } = await params;
-  const customer = await getCustomer(prisma, ctx, id);
+  const customer = await getCustomer(ctx, id);
   if (!customer) notFound();
 
   async function handleSubmit(fd: FormData): Promise<CustomerActionState> {

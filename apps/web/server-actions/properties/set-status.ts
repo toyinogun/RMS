@@ -2,7 +2,6 @@
 
 import { revalidatePath } from 'next/cache';
 import { propertySetStatusSchema } from '@solutio/shared/properties';
-import { prisma } from '@solutio/db/client';
 import {
   setPropertyStatus,
   PropertyNotFoundError,
@@ -28,7 +27,7 @@ export async function setPropertyStatusAction(
   if (!parsed.success) return { ok: false, message: 'Invalid input' };
 
   try {
-    await setPropertyStatus(prisma, ctx, parsed.data);
+    await setPropertyStatus(ctx, parsed.data);
     revalidatePath('/properties');
     revalidatePath(`/properties/${parsed.data.id}`);
     return { ok: true };

@@ -1,15 +1,14 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { z } from 'zod';
+import type { ZodError } from 'zod';
 import { customerUpdateSchema } from '@solutio/shared/customers';
-import { prisma } from '@solutio/db/client';
 import { updateCustomer, CustomerNotFoundError } from '@solutio/db/customers-service';
 import { getTenantContext } from '@/lib/tenant-context';
 import { hasRole } from '@solutio/shared/tenant';
 import type { CustomerActionState } from './create';
 
-function flattenZod(err: z.ZodError): Record<string, string> {
+function flattenZod(err: ZodError): Record<string, string> {
   const out: Record<string, string> = {};
   for (const issue of err.issues) {
     const path = issue.path.join('.');
@@ -39,7 +38,7 @@ export async function updateCustomerAction(
   }
 
   try {
-    const updated = await updateCustomer(prisma, ctx, parsed.data);
+    const updated = await updateCustomer(ctx, parsed.data);
     revalidatePath('/customers');
     revalidatePath(`/customers/${updated.id}`);
     return { ok: true, data: { id: updated.id } };

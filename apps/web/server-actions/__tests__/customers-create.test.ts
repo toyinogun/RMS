@@ -75,12 +75,11 @@ describe('createCustomerAction', () => {
     expect(revalidatePathMock).toHaveBeenCalledWith('/customers');
   });
 
-  test('calls createCustomer with prisma, ctx, and parsed data', async () => {
+  test('calls createCustomer with ctx and parsed data', async () => {
     getTenantContextMock.mockResolvedValue(ownerCtx);
     createCustomerMock.mockResolvedValue({ id: 'cust-abc' } as never);
     await createCustomerAction(null, fd({ fullName: 'Bola Ade', phone: '+2348099999999' }));
     expect(createCustomerMock).toHaveBeenCalledWith(
-      {},
       ownerCtx,
       expect.objectContaining({ fullName: 'Bola Ade', phone: '+2348099999999' }),
     );

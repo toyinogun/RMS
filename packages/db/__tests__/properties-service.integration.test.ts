@@ -45,7 +45,7 @@ afterAll(async () => {
 describe('properties-service', () => {
   test('createProperty stores totalPriceKobo as BigInt and injects tenantId', async () => {
     const ctx = ctxFor(TENANT_A);
-    const created = await createProperty(pg.prisma, ctx, {
+    const created = await createProperty(ctx, {
       code: 'AT-001',
       title: '3-bed terrace',
       addressLine: '12 Marina Road',
@@ -60,7 +60,7 @@ describe('properties-service', () => {
 
   test('duplicate code within tenant throws PropertyCodeConflictError', async () => {
     const ctx = ctxFor(TENANT_A);
-    await createProperty(pg.prisma, ctx, {
+    await createProperty(ctx, {
       code: 'AT-DUP',
       title: 'X',
       addressLine: 'X',
@@ -68,7 +68,7 @@ describe('properties-service', () => {
       totalPriceKobo: 1_000_00n,
     });
     await expect(
-      createProperty(pg.prisma, ctx, {
+      createProperty(ctx, {
         code: 'AT-DUP',
         title: 'Y',
         addressLine: 'Y',
@@ -81,14 +81,14 @@ describe('properties-service', () => {
   test('same code in different tenant is allowed', async () => {
     const ctxA = ctxFor(TENANT_A);
     const ctxB = ctxFor(TENANT_B);
-    await createProperty(pg.prisma, ctxA, {
+    await createProperty(ctxA, {
       code: 'CROSS-OK',
       title: 'X',
       addressLine: 'X',
       city: 'X',
       totalPriceKobo: 1_000_00n,
     });
-    const inB = await createProperty(pg.prisma, ctxB, {
+    const inB = await createProperty(ctxB, {
       code: 'CROSS-OK',
       title: 'Y',
       addressLine: 'Y',
@@ -100,22 +100,22 @@ describe('properties-service', () => {
 
   test('setPropertyStatus toggles AVAILABLE <-> RESERVED when no plans reference it', async () => {
     const ctx = ctxFor(TENANT_A);
-    const p = await createProperty(pg.prisma, ctx, {
+    const p = await createProperty(ctx, {
       code: 'AT-STATUS',
       title: 'X',
       addressLine: 'X',
       city: 'X',
       totalPriceKobo: 1_000_00n,
     });
-    const reserved = await setPropertyStatus(pg.prisma, ctx, { id: p.id, status: 'RESERVED' });
+    const reserved = await setPropertyStatus(ctx, { id: p.id, status: 'RESERVED' });
     expect(reserved.status).toBe('RESERVED');
-    const available = await setPropertyStatus(pg.prisma, ctx, { id: p.id, status: 'AVAILABLE' });
+    const available = await setPropertyStatus(ctx, { id: p.id, status: 'AVAILABLE' });
     expect(available.status).toBe('AVAILABLE');
   });
 
   test('setPropertyStatus blocks when a non-cancelled plan references the property', async () => {
     const ctx = ctxFor(TENANT_A);
-    const property = await createProperty(pg.prisma, ctx, {
+    const property = await createProperty(ctx, {
       code: 'AT-BLOCK',
       title: 'X',
       addressLine: 'X',
@@ -139,23 +139,23 @@ describe('properties-service', () => {
       },
     });
     await expect(
-      setPropertyStatus(pg.prisma, ctx, { id: property.id, status: 'RESERVED' }),
+      setPropertyStatus(ctx, { id: property.id, status: 'RESERVED' }),
     ).rejects.toBeInstanceOf(PropertyStatusChangeBlockedError);
   });
 
   test('softDeleteProperty hides from list and blocks when a non-cancelled plan exists', async () => {
     const ctx = ctxFor(TENANT_A);
-    const free = await createProperty(pg.prisma, ctx, {
+    const free = await createProperty(ctx, {
       code: 'AT-DEL-OK',
       title: 'X',
       addressLine: 'X',
       city: 'X',
       totalPriceKobo: 1_000_00n,
     });
-    await softDeleteProperty(pg.prisma, ctx, free.id);
-    expect(await getProperty(pg.prisma, ctx, free.id)).toBeNull();
+    await softDeleteProperty(ctx, free.id);
+    expect(await getProperty(ctx, free.id)).toBeNull();
 
-    const linked = await createProperty(pg.prisma, ctx, {
+    const linked = await createProperty(ctx, {
       code: 'AT-DEL-BLK',
       title: 'X',
       addressLine: 'X',
@@ -178,28 +178,28 @@ describe('properties-service', () => {
         status: 'DRAFT',
       },
     });
-    await expect(softDeleteProperty(pg.prisma, ctx, linked.id)).rejects.toBeInstanceOf(
+    await expect(softDeleteProperty(ctx, linked.id)).rejects.toBeInstanceOf(
       PropertyHasPlansError,
     );
   });
 
   test('listProperties filters by status', async () => {
     const ctx = ctxFor(TENANT_A);
-    const available = await listProperties(pg.prisma, ctx, { status: 'AVAILABLE' });
+    const available = await listProperties(ctx, { status: 'AVAILABLE' });
     expect(available.every((p) => p.status === 'AVAILABLE')).toBe(true);
   });
 
   test('listProperties cross-tenant isolation', async () => {
     const ctxA = ctxFor(TENANT_A);
     const ctxB = ctxFor(TENANT_B);
-    await createProperty(pg.prisma, ctxB, {
+    await createProperty(ctxB, {
       code: 'B-ONLY',
       title: 'X',
       addressLine: 'X',
       city: 'X',
       totalPriceKobo: 1_000_00n,
     });
-    const listA = await listProperties(pg.prisma, ctxA);
+    const listA = await listProperties(ctxA);
     expect(listA.some((p) => p.code === 'B-ONLY')).toBe(false);
   });
 

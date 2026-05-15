@@ -1,7 +1,8 @@
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import type { TenantContext } from '@solutio/shared/tenant';
 import type { CustomerCreateInput, CustomerUpdateInput } from '@solutio/shared/customers';
 import { forTenant } from './tenant-client';
+import { prisma } from './client';
 
 export class CustomerNotFoundError extends Error {
   constructor(id: string) {
@@ -18,7 +19,6 @@ export class CustomerHasPlansError extends Error {
 }
 
 export async function createCustomer(
-  prisma: PrismaClient,
   ctx: TenantContext,
   input: CustomerCreateInput,
 ) {
@@ -35,7 +35,6 @@ export async function createCustomer(
 }
 
 export async function updateCustomer(
-  prisma: PrismaClient,
   ctx: TenantContext,
   input: CustomerUpdateInput,
 ) {
@@ -55,7 +54,6 @@ export async function updateCustomer(
 }
 
 export async function softDeleteCustomer(
-  prisma: PrismaClient,
   ctx: TenantContext,
   id: string,
 ) {
@@ -80,7 +78,6 @@ export async function softDeleteCustomer(
 }
 
 export async function listCustomers(
-  prisma: PrismaClient,
   ctx: TenantContext,
   opts: { search?: string; take?: number; cursor?: string } = {},
 ) {
@@ -106,7 +103,6 @@ export async function listCustomers(
 }
 
 export async function getCustomer(
-  prisma: PrismaClient,
   ctx: TenantContext,
   id: string,
 ) {

@@ -1,4 +1,4 @@
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import type { TenantContext } from '@solutio/shared/tenant';
 import type {
   PropertyCreateInput,
@@ -6,6 +6,7 @@ import type {
   PropertyStatusInput,
 } from '@solutio/shared/properties';
 import { forTenant } from './tenant-client';
+import { prisma } from './client';
 
 export class PropertyNotFoundError extends Error {
   constructor(id: string) {
@@ -40,7 +41,6 @@ function isUniqueConstraintError(err: unknown): err is Prisma.PrismaClientKnownR
 }
 
 export async function createProperty(
-  prisma: PrismaClient,
   ctx: TenantContext,
   input: PropertyCreateInput,
 ) {
@@ -62,7 +62,6 @@ export async function createProperty(
 }
 
 export async function updateProperty(
-  prisma: PrismaClient,
   ctx: TenantContext,
   input: PropertyUpdateInput,
 ) {
@@ -87,7 +86,6 @@ export async function updateProperty(
 }
 
 export async function setPropertyStatus(
-  prisma: PrismaClient,
   ctx: TenantContext,
   input: { id: string; status: PropertyStatusInput },
 ) {
@@ -121,7 +119,6 @@ export async function setPropertyStatus(
 }
 
 export async function softDeleteProperty(
-  prisma: PrismaClient,
   ctx: TenantContext,
   id: string,
 ) {
@@ -146,7 +143,6 @@ export async function softDeleteProperty(
 }
 
 export async function listProperties(
-  prisma: PrismaClient,
   ctx: TenantContext,
   opts: {
     status?: 'AVAILABLE' | 'RESERVED' | 'SOLD';
@@ -179,7 +175,6 @@ export async function listProperties(
 }
 
 export async function getProperty(
-  prisma: PrismaClient,
   ctx: TenantContext,
   id: string,
 ) {

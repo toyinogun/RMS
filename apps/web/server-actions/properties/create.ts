@@ -1,9 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { z } from 'zod';
+import type { ZodError } from 'zod';
 import { propertyCreateSchema } from '@solutio/shared/properties';
-import { prisma } from '@solutio/db/client';
 import { createProperty, PropertyCodeConflictError } from '@solutio/db/properties-service';
 import { getTenantContext } from '@/lib/tenant-context';
 import { hasRole } from '@solutio/shared/tenant';
@@ -12,7 +11,7 @@ export type PropertyActionState =
   | { ok: true; data: { id: string } }
   | { ok: false; message: string; fieldErrors?: Record<string, string> };
 
-function flattenZod(err: z.ZodError): Record<string, string> {
+function flattenZod(err: ZodError): Record<string, string> {
   const out: Record<string, string> = {};
   for (const issue of err.issues) {
     const path = issue.path.join('.');
@@ -41,7 +40,7 @@ export async function createPropertyAction(
   }
 
   try {
-    const created = await createProperty(prisma, ctx, parsed.data);
+    const created = await createProperty(ctx, parsed.data);
     revalidatePath('/properties');
     return { ok: true, data: { id: created.id } };
   } catch (err) {

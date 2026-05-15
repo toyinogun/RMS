@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getTenantContext } from '@/lib/tenant-context';
-import { prisma } from '@solutio/db/client';
 import { listCustomers } from '@solutio/db/customers-service';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,7 +22,7 @@ export default async function CustomersPage({
   const ctx = await getTenantContext();
   if (!ctx) redirect('/login');
   const { q } = await searchParams;
-  const customers = await listCustomers(prisma, ctx, { search: q });
+  const customers = await listCustomers(ctx, { search: q });
 
   return (
     <section className="space-y-4">

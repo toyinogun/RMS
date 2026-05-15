@@ -2,7 +2,6 @@
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { prisma } from '@solutio/db/client';
 import { softDeleteProperty, PropertyHasPlansError, PropertyNotFoundError } from '@solutio/db/properties-service';
 import { getTenantContext } from '@/lib/tenant-context';
 import { hasRole } from '@solutio/shared/tenant';
@@ -23,7 +22,7 @@ export async function softDeletePropertyAction(
   if (!parsed.success) return { ok: false, message: 'Invalid id' };
 
   try {
-    await softDeleteProperty(prisma, ctx, parsed.data.id);
+    await softDeleteProperty(ctx, parsed.data.id);
     revalidatePath('/properties');
     return { ok: true };
   } catch (err) {

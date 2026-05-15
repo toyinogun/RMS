@@ -2,7 +2,6 @@
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { prisma } from '@solutio/db/client';
 import { softDeleteCustomer, CustomerHasPlansError, CustomerNotFoundError } from '@solutio/db/customers-service';
 import { getTenantContext } from '@/lib/tenant-context';
 import { hasRole } from '@solutio/shared/tenant';
@@ -23,7 +22,7 @@ export async function softDeleteCustomerAction(
   if (!parsed.success) return { ok: false, message: 'Invalid id' };
 
   try {
-    await softDeleteCustomer(prisma, ctx, parsed.data.id);
+    await softDeleteCustomer(ctx, parsed.data.id);
     revalidatePath('/customers');
     return { ok: true };
   } catch (err) {

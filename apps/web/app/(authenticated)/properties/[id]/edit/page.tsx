@@ -2,7 +2,6 @@ import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import type { Route } from 'next';
 import { getTenantContext } from '@/lib/tenant-context';
-import { prisma } from '@solutio/db/client';
 import { getProperty } from '@solutio/db/properties-service';
 import { type Kobo } from '@solutio/shared/money';
 import { PropertyForm } from '@/components/properties/property-form';
@@ -20,7 +19,7 @@ export default async function EditPropertyPage({
   if (!ctx) redirect('/login');
 
   const { id } = await params;
-  const property = await getProperty(prisma, ctx, id);
+  const property = await getProperty(ctx, id);
   if (!property) notFound();
 
   async function handleSubmit(fd: FormData): Promise<PropertyActionState> {
