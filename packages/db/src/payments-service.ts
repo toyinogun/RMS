@@ -81,6 +81,16 @@ export class AllocationAgainstPaidInstallmentError extends Error {
   }
 }
 
+/** Same installment appears twice in the manual override allocations. */
+export class AllocationDuplicateInstallmentError extends Error {
+  static readonly code = 'ALLOCATION_DUPLICATE_INSTALLMENT' as const;
+  readonly code = AllocationDuplicateInstallmentError.code;
+  constructor(public readonly installmentId: string) {
+    super(`Allocation list contains installment ${installmentId} more than once`);
+    this.name = 'AllocationDuplicateInstallmentError';
+  }
+}
+
 /**
  * Manual allocation row amount exceeds the installment's outstanding balance.
  */
@@ -109,6 +119,8 @@ export class PaymentRetryableSerializationError extends Error {
 }
 
 export type { PaymentRecordInput };
+
+type AllocationRow = { installmentId: string; amountKobo: Kobo };
 
 export type RecordPaymentResult = {
   paymentId: string;
@@ -183,7 +195,6 @@ export async function recordPayment(
         // Determine the allocation list: either compute FIFO, or validate the
         // caller-supplied rows. Either way, end with a normalized list of
         // { installmentId, amountKobo }.
-        type AllocationRow = { installmentId: string; amountKobo: Kobo };
         let allocations: AllocationRow[];
 
         if (input.allocations === undefined) {
@@ -205,7 +216,12 @@ export async function recordPayment(
           }));
         } else {
           const byId = new Map(plan.installments.map((i) => [i.id, i]));
+          const seen = new Set<string>();
           for (const row of input.allocations) {
+            if (seen.has(row.installmentId)) {
+              throw new AllocationDuplicateInstallmentError(row.installmentId);
+            }
+            seen.add(row.installmentId);
             const inst = byId.get(row.installmentId);
             if (!inst) throw new AllocationInstallmentNotFoundError(row.installmentId);
             if (inst.status === 'PAID') {
@@ -271,19 +287,25 @@ export async function recordPayment(
             where: { id: alloc.installmentId },
             data: { amountPaidKobo: newPaid, status: newStatus },
           });
+          // Local mutation is deliberate: installmentState is a transaction-scoped copy
+          // used to compute the post-write allPaid check without a second findMany.
           inst.amountPaidKobo = newPaid;
           inst.status = newStatus;
         }
 
-        // Plan + property state transitions.
+        // Plan + property state transitions. Collapse DRAFT→ACTIVE→COMPLETED
+        // into a single plan.update by computing the final status up-front.
+        const allPaid = installmentState.every(
+          (i) => i.amountPaidKobo >= i.amountDueKobo,
+        );
         let nextStatus: PlanStatus = plan.status;
 
         if (plan.status === 'DRAFT') {
+          nextStatus = allPaid ? 'COMPLETED' : 'ACTIVE';
           await tx.plan.update({
             where: { id: plan.id },
-            data: { status: 'ACTIVE' },
+            data: { status: nextStatus },
           });
-          nextStatus = 'ACTIVE';
           // Property auto-flip is idempotent: only write if AVAILABLE.
           if (plan.property.status === 'AVAILABLE') {
             await tx.property.update({
@@ -291,17 +313,12 @@ export async function recordPayment(
               data: { status: 'SOLD' },
             });
           }
-        }
-
-        const allPaid = installmentState.every(
-          (i) => i.amountPaidKobo >= i.amountDueKobo,
-        );
-        if (allPaid) {
+        } else if (allPaid) {
+          nextStatus = 'COMPLETED';
           await tx.plan.update({
             where: { id: plan.id },
             data: { status: 'COMPLETED' },
           });
-          nextStatus = 'COMPLETED';
         }
 
         return {

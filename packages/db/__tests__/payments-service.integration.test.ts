@@ -7,10 +7,11 @@ import {
   PaymentOverpayError,
   AllocationInstallmentNotFoundError,
   AllocationAgainstPaidInstallmentError,
+  AllocationDuplicateInstallmentError,
   AllocationExceedsOutstandingError,
   PaymentRetryableSerializationError,
 } from '../src/payments-service.js';
-import { createPlan, getPlan, PropertyNotAvailableError } from '../src/plans-service.js';
+import { createPlan, getPlan } from '../src/plans-service.js';
 import { createProperty } from '../src/properties-service.js';
 import { createCustomer } from '../src/customers-service.js';
 import type { TenantContext } from '@solutio/shared/tenant';
@@ -55,10 +56,10 @@ const seedAvailableProperty = async (tenantId: string) => {
 
 const seedCustomer = async (tenantId: string, fullName = 'Buyer One') => {
   const ctx = ctxFor(tenantId);
-  let phoneSuffix = 0;
-  const phone = `+23480${(Date.now() % 100000000)
-    .toString()
-    .padStart(8, '0')}${phoneSuffix++}`.slice(0, 14);
+  const phone = `+23480${(Date.now() % 100000000).toString().padStart(8, '0')}`.slice(
+    0,
+    14,
+  );
   return createCustomer(ctx, { fullName, phone });
 };
 
@@ -388,6 +389,32 @@ describe('recordPayment — rejection paths', () => {
       } as PaymentRecordInput),
     ).rejects.toBeInstanceOf(AllocationExceedsOutstandingError);
   });
+
+  test('rejects allocations that target the same installment twice', async () => {
+    const ctx = ctxFor(TENANT_A);
+    const property = await seedAvailableProperty(TENANT_A);
+    const customer = await seedCustomer(TENANT_A);
+    const planId = await seedDraftPlan(ctx, property.id, customer.id);
+
+    const plan = await getPlan(ctx, planId);
+    const monthly1 = plan!.installments.find((i) => i.sequenceNo === 1)!;
+
+    await expect(
+      recordPayment(ctx, {
+        planId,
+        amountKobo: 800_000_00n as Kobo,
+        paidAt: onStartDay(),
+        method: 'CASH',
+        allocations: [
+          { installmentId: monthly1.id, amountKobo: 400_000_00n as Kobo },
+          { installmentId: monthly1.id, amountKobo: 400_000_00n as Kobo },
+        ],
+      } as PaymentRecordInput),
+    ).rejects.toBeInstanceOf(AllocationDuplicateInstallmentError);
+
+    const count = await pg.prisma.payment.count({ where: { planId } });
+    expect(count).toBe(0);
+  });
 });
 
 describe('recordPayment — property race (SERIALIZABLE)', () => {
@@ -425,13 +452,11 @@ describe('recordPayment — property race (SERIALIZABLE)', () => {
     expect(fulfilled).toHaveLength(1);
     expect(rejected).toHaveLength(1);
 
-    // The loser's error can be either retryable-serialization or property-not-available
-    // depending on whether Postgres' SERIALIZABLE catches the conflict.
     const loserErr = (rejected[0] as PromiseRejectedResult).reason;
-    const isExpected =
-      loserErr instanceof PaymentRetryableSerializationError ||
-      loserErr instanceof PropertyNotAvailableError;
-    expect(isExpected).toBe(true);
+    // recordPayment's property flip is idempotent, so the only error the SERIALIZABLE
+    // loser can raise here is P2034 (PaymentRetryableSerializationError). When the
+    // caller is plan-create (Task 3), PropertyNotAvailableError becomes possible.
+    expect(loserErr).toBeInstanceOf(PaymentRetryableSerializationError);
 
     // Final state: exactly one plan ACTIVE, the other still DRAFT, property SOLD.
     const planA = await pg.prisma.plan.findUnique({ where: { id: planAId } });

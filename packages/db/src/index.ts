@@ -8,6 +8,7 @@ export {
   PaymentOverpayError,
   AllocationInstallmentNotFoundError,
   AllocationAgainstPaidInstallmentError,
+  AllocationDuplicateInstallmentError,
   AllocationExceedsOutstandingError,
   PaymentRetryableSerializationError,
 } from './payments-service';
