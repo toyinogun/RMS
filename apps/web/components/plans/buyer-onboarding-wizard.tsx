@@ -54,6 +54,24 @@ interface BuyerOnboardingWizardProps {
   properties: PropertyOption[];
 }
 
+type DepositMethod = 'CASH' | 'TRANSFER' | 'CHEQUE' | 'CARD_MANUAL' | 'OTHER';
+
+const DEPOSIT_METHODS: readonly DepositMethod[] = [
+  'CASH',
+  'TRANSFER',
+  'CHEQUE',
+  'CARD_MANUAL',
+  'OTHER',
+] as const;
+
+const DEPOSIT_METHOD_LABEL: Record<DepositMethod, string> = {
+  CASH: 'Cash',
+  TRANSFER: 'Transfer',
+  CHEQUE: 'Cheque',
+  CARD_MANUAL: 'Card (manual)',
+  OTHER: 'Other',
+};
+
 type FormValues = {
   customerMode: 'existing' | 'new';
   customerId: string;
@@ -68,6 +86,11 @@ type FormValues = {
   monthlyNgn: string;
   termMonths: number;
   startDate: string;
+  depositReceived: boolean;
+  depositMethod: DepositMethod;
+  depositPaidAt: string;
+  depositReference: string;
+  depositNotes: string;
 };
 
 const STEPS = [
@@ -105,6 +128,11 @@ export function BuyerOnboardingWizard({ customers, properties }: BuyerOnboarding
       monthlyNgn: '',
       termMonths: 24,
       startDate: todayIso(),
+      depositReceived: false,
+      depositMethod: 'CASH',
+      depositPaidAt: '',
+      depositReference: '',
+      depositNotes: '',
     },
   });
 
@@ -281,7 +309,16 @@ export function BuyerOnboardingWizard({ customers, properties }: BuyerOnboarding
     fd.append('monthlyNgn', v.monthlyNgn);
     fd.append('termMonths', String(v.termMonths));
     fd.append('startDate', v.startDate);
-    fd.append('depositReceived', 'false');
+    fd.append('depositReceived', v.depositReceived ? 'true' : 'false');
+    if (v.depositReceived) {
+      // Method always submitted (server requires it when depositReceived === true);
+      // the three text fields are only sent when non-empty so the server sees `undefined`
+      // and applies its own defaults rather than empty-string validation failures.
+      fd.append('depositMethod', v.depositMethod);
+      if (v.depositPaidAt.trim()) fd.append('depositPaidAt', v.depositPaidAt);
+      if (v.depositReference.trim()) fd.append('depositReference', v.depositReference);
+      if (v.depositNotes.trim()) fd.append('depositNotes', v.depositNotes);
+    }
 
     const result: PlanCreateState = await createPlanAction(null, fd);
     setSubmitting(false);
@@ -299,6 +336,9 @@ export function BuyerOnboardingWizard({ customers, properties }: BuyerOnboarding
           monthlyNgn: 'monthlyNgn',
           termMonths: 'termMonths',
           startDate: 'startDate',
+          depositReceived: 'depositReceived',
+          depositMethod: 'depositMethod',
+          depositPaidAt: 'depositPaidAt',
         };
         for (const [path, message] of Object.entries(result.fieldErrors)) {
           const target = fieldMap[path];
@@ -814,6 +854,8 @@ function TermsStep({ form }: { form: UseFormReturn<FormValues> }) {
   const deposit = watch('depositNgn');
   const monthly = watch('monthlyNgn');
   const term = watch('termMonths');
+  const depositReceived = watch('depositReceived');
+  const startDate = watch('startDate');
 
   const balance = React.useMemo(() => safeBalance(total, deposit, monthly, term), [
     total,
@@ -889,6 +931,87 @@ function TermsStep({ form }: { form: UseFormReturn<FormValues> }) {
       </div>
 
       <BalanceLine balance={balance} />
+
+      <div className="rounded-lg border border-paper-300 bg-paper-50 p-4 sm:p-5">
+        <label className="flex cursor-pointer items-start gap-3">
+          <input
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 cursor-pointer rounded border-paper-400 text-clay-600 focus-visible:ring-2 focus-visible:ring-clay-600/30"
+            {...register('depositReceived')}
+          />
+          <span className="flex flex-col gap-0.5">
+            <span className="text-sm font-medium text-ink-900">
+              Deposit received today
+            </span>
+            <span className="text-[13px] text-ink-500">
+              Tick if the buyer is paying the down payment now. We&apos;ll record it as the first
+              payment on the plan.
+            </span>
+          </span>
+        </label>
+
+        {formState.errors.depositReceived && (
+          <div className="mt-2">
+            <FieldError>{formState.errors.depositReceived.message}</FieldError>
+          </div>
+        )}
+
+        {depositReceived && (
+          <div className="mt-4 grid grid-cols-1 gap-3 border-t border-paper-300 pt-4 sm:grid-cols-2">
+            <Field
+              id="depositMethod"
+              label="Method"
+              required
+              error={formState.errors.depositMethod?.message}
+            >
+              <select
+                id="depositMethod"
+                aria-invalid={!!formState.errors.depositMethod}
+                className="h-10 w-full rounded-md border border-paper-400 bg-paper-50 px-3 text-sm text-ink-900 outline-none focus:border-clay-600 focus:ring-[3px] focus:ring-clay-600/25"
+                {...register('depositMethod')}
+              >
+                {DEPOSIT_METHODS.map((m) => (
+                  <option key={m} value={m}>
+                    {DEPOSIT_METHOD_LABEL[m]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field
+              id="depositPaidAt"
+              label="Date"
+              error={formState.errors.depositPaidAt?.message}
+            >
+              <Input
+                id="depositPaidAt"
+                type="date"
+                className="bg-paper-50 font-mono"
+                max={startDate || undefined}
+                {...register('depositPaidAt')}
+              />
+              <p className="text-[12px] text-ink-500">
+                Defaults to the plan start date if you leave this empty.
+              </p>
+            </Field>
+            <Field id="depositReference" label="Reference (optional)">
+              <Input
+                id="depositReference"
+                className="bg-paper-50"
+                placeholder="Receipt #, TX ID, cheque number…"
+                {...register('depositReference')}
+              />
+            </Field>
+            <Field id="depositNotes" label="Notes (optional)">
+              <textarea
+                id="depositNotes"
+                rows={2}
+                className="w-full rounded-md border border-paper-400 bg-paper-50 px-3 py-2 text-sm text-ink-900 outline-none focus:border-clay-600 focus:ring-[3px] focus:ring-clay-600/25"
+                {...register('depositNotes')}
+              />
+            </Field>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
