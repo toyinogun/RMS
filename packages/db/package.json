@@ -8,7 +8,8 @@
     ".": "./src/index.ts",
     "./client": "./src/client.ts",
     "./tenant-client": "./src/tenant-client.ts",
-    "./seed": "./src/seed.ts"
+    "./seed": "./src/seed.ts",
+    "./customers-service": "./src/customers-service.ts"
   },
   "scripts": {
     "prisma:generate": "prisma generate",
