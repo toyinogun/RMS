@@ -11,7 +11,9 @@
     "./seed": "./src/seed.ts",
     "./customers-service": "./src/customers-service.ts",
     "./properties-service": "./src/properties-service.ts",
-    "./plans-service": "./src/plans-service.ts"
+    "./plans-service": "./src/plans-service.ts",
+    "./payments-service": "./src/payments-service.ts",
+    "./plan-errors": "./src/plan-errors.ts"
   },
   "scripts": {
     "prisma:generate": "prisma generate",
