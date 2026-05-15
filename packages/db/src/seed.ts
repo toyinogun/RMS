@@ -63,32 +63,60 @@ export async function seed(opts: SeedOptions) {
   return { tenant, user };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const email = process.env.SEED_OWNER_EMAIL;
-  const password = process.env.SEED_OWNER_PASSWORD;
-  if (!email || !password) {
-    console.error('SEED_OWNER_EMAIL and SEED_OWNER_PASSWORD must be set.');
-    process.exit(1);
-  }
-  // Path stored in a variable so TypeScript treats this as a runtime-only import
-  // (Promise<any>) — apps/web is intentionally outside packages/db's rootDir;
-  // the auth adapter only needs to exist when the seed CLI runs.
+export type SeedCliDeps = {
+  env?: Record<string, string | undefined>;
+  exit?: (code: number) => void;
+  log?: (msg: string) => void;
+  err?: (msg: string) => void;
+  loadAuthModule?: () => Promise<{ createSeedAuthAdapter?: () => SeedAuthAdapter }>;
+  prismaClient?: PrismaClient;
+};
+
+async function defaultLoadAuthModule(): Promise<{
+  createSeedAuthAdapter?: () => SeedAuthAdapter;
+}> {
+  // Path in a variable so TypeScript treats this as Promise<any> — apps/web
+  // is intentionally outside packages/db's rootDir; the auth adapter only
+  // needs to exist when the seed CLI runs.
   const authModulePath = '../../../apps/web/lib/auth.js';
-  const authModule = (await import(authModulePath).catch(() => ({}))) as {
+  return (await import(authModulePath).catch(() => ({}))) as {
     createSeedAuthAdapter?: () => SeedAuthAdapter;
   };
+}
+
+export async function runSeedCli(deps: SeedCliDeps = {}): Promise<void> {
+  const env = deps.env ?? process.env;
+  const exit = deps.exit ?? ((code: number) => process.exit(code));
+  const err = deps.err ?? ((msg: string) => console.error(msg));
+  const log = deps.log ?? ((msg: string) => console.log(msg));
+  const loadAuthModule = deps.loadAuthModule ?? defaultLoadAuthModule;
+
+  const email = env.SEED_OWNER_EMAIL;
+  const password = env.SEED_OWNER_PASSWORD;
+  if (!email || !password) {
+    err('SEED_OWNER_EMAIL and SEED_OWNER_PASSWORD must be set.');
+    return exit(1);
+  }
+  const authModule = await loadAuthModule();
   const createSeedAuthAdapter = authModule.createSeedAuthAdapter;
   if (!createSeedAuthAdapter) {
-    console.error('apps/web auth module not built. Run pnpm --filter @solutio/web build first.');
-    process.exit(1);
+    err('apps/web auth module not built. Run pnpm --filter @solutio/web build first.');
+    return exit(1);
   }
   await seed({
     ownerEmail: email,
     ownerPassword: password,
-    ownerName: process.env.SEED_OWNER_NAME ?? 'Atrium Owner',
+    ownerName: env.SEED_OWNER_NAME ?? 'Atrium Owner',
     authAdapter: createSeedAuthAdapter(),
+    prismaClient: deps.prismaClient,
   });
-  console.log('Seed complete.');
-  const { prisma } = await import('./client.js');
-  await prisma.$disconnect();
+  log('Seed complete.');
+  if (!deps.prismaClient) {
+    const { prisma } = await import('./client');
+    await prisma.$disconnect();
+  }
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  await runSeedCli();
 }
