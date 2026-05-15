@@ -26,7 +26,7 @@ const paidAtSchema = z
     return d;
   });
 
-const optionalTrimmed = (label: string, max: number) =>
+export const optionalTrimmed = (label: string, max: number) =>
   z
     .string()
     .trim()
