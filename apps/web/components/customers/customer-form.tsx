@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { customerCreateSchema, customerUpdateSchema } from '@solutio/shared/customers';
+import { customerCreateSchema } from '@solutio/shared/customers';
 import type { CustomerCreateInput } from '@solutio/shared/customers';
 import type { CustomerActionState } from '@/server-actions/customers/create';
 import { Input } from '@/components/ui/input';
@@ -34,7 +34,11 @@ type FormValues = CustomerCreateInput;
 
 export function CustomerForm({ mode, onSubmit, variant = 'page', initial }: CustomerFormProps) {
   const router = useRouter();
-  const schema = mode === 'edit' ? customerUpdateSchema : customerCreateSchema;
+  // Use customerCreateSchema as the react-hook-form resolver regardless of mode.
+  // In edit mode, `id` is not a registered form field — it is appended to
+  // FormData separately after validation. Using customerUpdateSchema here
+  // would cause the zodResolver to reject the form (id missing from values).
+  const schema = customerCreateSchema;
 
   const defaultValues: Partial<FormValues> = {
     fullName: initial?.fullName ?? '',

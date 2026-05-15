@@ -39,4 +39,33 @@ describe('CustomerForm', () => {
     expect(arg.get('fullName')).toBe('Adaeze Okafor');
     expect(arg.get('phone')).toBe('+2348012345001');
   });
+
+  test('edit mode: submits with id appended and does not block on missing id field', async () => {
+    const initial = {
+      id: '019e2be6-0000-7000-8000-000000000001',
+      fullName: 'Original Name',
+      phone: '+2348011111111',
+      email: null,
+      nationalId: null,
+      notes: null,
+    };
+    const onSubmit = vi.fn().mockResolvedValue({ ok: true, data: { id: initial.id } });
+    render(<CustomerForm mode="edit" onSubmit={onSubmit} initial={initial} />);
+
+    // Clear the phone field and type a new value
+    const phoneInput = screen.getByLabelText(/^phone/i);
+    await userEvent.clear(phoneInput);
+    await userEvent.type(phoneInput, '+2348099999999');
+
+    await userEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    // The form should submit — zodResolver should not block because id is
+    // not a registered form field (it's appended separately after validation).
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    const arg = onSubmit.mock.calls[0]![0] as FormData;
+    expect(arg.get('fullName')).toBe('Original Name');
+    expect(arg.get('phone')).toBe('+2348099999999');
+    // id is appended by the form handler for edit mode
+    expect(arg.get('id')).toBe(initial.id);
+  });
 });
