@@ -9,5 +9,5 @@ resources:
 images:
   # ArgoCD Image Updater writes the live digest here. The placeholder ensures
   # `kubectl kustomize` validates the manifest until the first push to main.
-  - name: repo.toyintest.org/solutio-web
+  - name: ghcr.io/toyinogun/rms
     newTag: placeholder

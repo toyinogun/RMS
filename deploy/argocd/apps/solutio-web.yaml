@@ -7,7 +7,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "0"
     # ArgoCD Image Updater configuration — watches the registry and writes the
     # resolved digest back into deploy/k8s/web/kustomization.yaml's images: block.
-    argocd-image-updater.argoproj.io/image-list: "web=repo.toyintest.org/solutio-web"
+    argocd-image-updater.argoproj.io/image-list: "web=ghcr.io/toyinogun/rms"
     argocd-image-updater.argoproj.io/web.update-strategy: digest
     argocd-image-updater.argoproj.io/write-back-method: "git:secret:argocd/git-creds"
     argocd-image-updater.argoproj.io/write-back-target: "kustomization:deploy/k8s/web"

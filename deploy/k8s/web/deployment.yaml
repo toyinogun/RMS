@@ -21,7 +21,7 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: web
-          image: repo.toyintest.org/solutio-web:placeholder
+          image: ghcr.io/toyinogun/rms:placeholder
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
