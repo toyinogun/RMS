@@ -71,7 +71,7 @@ test('M3: create DRAFT plan with materialized installments, then cancel', async 
 
   // Land on plan detail; status should be DRAFT.
   await expect(page).toHaveURL(/\/plans\/[0-9a-f-]+/);
-  await expect(page.getByText('DRAFT')).toBeVisible();
+  await expect(page.getByText('DRAFT', { exact: true })).toBeVisible();
   await expect(page.getByText('M3 Customer · M3-01')).toBeVisible();
 
   // Installments tab: 25 rows (seq 0..24). Sequence 0 amount = ₦500,000.
@@ -89,7 +89,7 @@ test('M3: create DRAFT plan with materialized installments, then cancel', async 
   // Cancel the plan from the detail page.
   await page.getByRole('link', { name: 'M3 Customer' }).click();
   await page.getByRole('button', { name: /cancel plan/i }).click();
-  await expect(page.getByText('CANCELLED')).toBeVisible();
+  await expect(page.getByText('CANCELLED', { exact: true })).toBeVisible();
   // Cancel button disappears for non-DRAFT plans.
   await expect(page.getByRole('button', { name: /cancel plan/i })).toHaveCount(0);
 });
