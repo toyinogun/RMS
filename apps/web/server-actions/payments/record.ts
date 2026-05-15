@@ -24,6 +24,8 @@ import { hasRole } from '@solutio/shared/tenant';
 // apps/web — keeps the bundler off the generated Prisma runtime.
 type PlanStatus = RecordPaymentResult['planStatus'];
 
+const MAX_ALLOCATION_ROWS = 60; // Plans never exceed 36 installments; 60 leaves headroom.
+
 export type PaymentRecordState =
   | { ok: true; data: { paymentId: string; planStatus: PlanStatus } }
   | { ok: false; message: string; fieldErrors?: Record<string, string> };
@@ -55,7 +57,7 @@ function buildAllocations(
   formData: FormData,
 ): Array<{ installmentId: string; amountNgn: string }> | undefined {
   const rows: Array<{ installmentId: string; amountNgn: string }> = [];
-  for (let i = 0; ; i++) {
+  for (let i = 0; i < MAX_ALLOCATION_ROWS; i++) {
     const idKey = `allocations[${i}].installmentId`;
     const amountKey = `allocations[${i}].amountNgn`;
     const hasId = formData.has(idKey);

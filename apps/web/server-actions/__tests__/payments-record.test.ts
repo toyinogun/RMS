@@ -243,6 +243,18 @@ describe('recordPaymentAction', () => {
     }
   });
 
+  test('maps PaymentOverpayError to amountNgn field error with formatted naira (thousands separator)', async () => {
+    getTenantContextMock.mockResolvedValue(staffCtx);
+    recordPaymentMock.mockRejectedValue(
+      new PaymentOverpayError(1_000_00n as bigint & { readonly __brand: 'Kobo' }),
+    );
+    const res = await recordPaymentAction(null, mkFormData());
+    expect(res).toMatchObject({
+      ok: false,
+      fieldErrors: { amountNgn: 'Payment exceeds outstanding balance by ₦1,000.00.' },
+    });
+  });
+
   test('maps AllocationAgainstPaidInstallmentError with sequenceNo in message', async () => {
     getTenantContextMock.mockResolvedValue(staffCtx);
     recordPaymentMock.mockRejectedValue(new AllocationAgainstPaidInstallmentError(3));
