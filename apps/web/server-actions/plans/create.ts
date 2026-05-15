@@ -59,6 +59,10 @@ export async function createPlanAction(
     termMonths: formData.get('termMonths'),
     startDate: formData.get('startDate'),
     depositReceived: formData.get('depositReceived') === 'true',
+    depositMethod: formData.get('depositMethod')?.toString() || undefined,
+    depositPaidAt: formData.get('depositPaidAt')?.toString() || undefined,
+    depositReference: formData.get('depositReference')?.toString() || undefined,
+    depositNotes: formData.get('depositNotes')?.toString() || undefined,
   });
   if (!parsed.success) {
     return {

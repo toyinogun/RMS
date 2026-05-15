@@ -105,16 +105,52 @@ describe('createPlanAction', () => {
     expect(createPlanMock).not.toHaveBeenCalled();
   });
 
-  test('rejects depositReceived=true with M4 message', async () => {
+  test('depositReceived=true happy path forwards deposit fields as parsed input', async () => {
+    getTenantContextMock.mockResolvedValue(staffCtx);
+    createPlanMock.mockResolvedValue({ id: validId });
+    const f = baseValidFd();
+    f.set('depositReceived', 'true');
+    f.set('depositMethod', 'CASH');
+    f.set('depositPaidAt', tomorrow());
+    f.set('depositReference', 'TEL-123');
+    f.set('depositNotes', 'paid in branch');
+    const res = await createPlanAction(null, f);
+    expect(res).toEqual({ ok: true, data: { id: validId } });
+    const callArg = createPlanMock.mock.calls[0]![1];
+    expect(callArg.depositReceived).toBe(true);
+    expect(callArg.depositMethod).toBe('CASH');
+    expect(callArg.depositReference).toBe('TEL-123');
+    expect(callArg.depositNotes).toBe('paid in branch');
+    expect(callArg.depositKobo).toBe(500_000_00n);
+    expect(callArg.totalPriceKobo).toBe(5_000_000_00n);
+    expect(callArg.monthlyKobo).toBe(200_000_00n);
+    expect(callArg.depositPaidAt).toBeInstanceOf(Date);
+  });
+
+  test('depositReceived=true with property-not-available is mapped to refresh message', async () => {
+    getTenantContextMock.mockResolvedValue(staffCtx);
+    createPlanMock.mockRejectedValue(new PropertyNotAvailableError(propertyId, 'RESERVED'));
+    const f = baseValidFd();
+    f.set('depositReceived', 'true');
+    f.set('depositMethod', 'CASH');
+    const res = await createPlanAction(null, f);
+    expect(res).toEqual({
+      ok: false,
+      message: 'That property is no longer available. Refresh and try again.',
+    });
+  });
+
+  test('depositReceived=true without depositMethod surfaces a fieldError (schema rejects)', async () => {
     getTenantContextMock.mockResolvedValue(staffCtx);
     const f = baseValidFd();
     f.set('depositReceived', 'true');
     const res = await createPlanAction(null, f);
     expect(res.ok).toBe(false);
     if (!res.ok) {
-      const messages = Object.values(res.fieldErrors ?? {});
-      expect(messages.some((m) => m.includes('M4'))).toBe(true);
+      expect(res.fieldErrors).toBeDefined();
+      expect(Object.keys(res.fieldErrors!)).toContain('depositMethod');
     }
+    expect(createPlanMock).not.toHaveBeenCalled();
   });
 
   test('maps PropertyNotAvailableError to a refresh-and-retry message', async () => {

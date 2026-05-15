@@ -1,11 +1,16 @@
 import { Prisma } from '@prisma/client';
-import type { PlanStatus } from '@prisma/client';
+import type {
+  InstallmentStatus,
+  PaymentMethod,
+  PlanStatus,
+  PropertyStatus,
+} from '@prisma/client';
 import { allocatePayment } from '@solutio/shared/payments';
 import type { PaymentRecordInput } from '@solutio/shared/payments';
 import type { Kobo } from '@solutio/shared/money';
 import type { TenantContext } from '@solutio/shared/tenant';
 import { deriveInstallmentStatus } from '@solutio/shared/installments';
-import { forTenant } from './tenant-client';
+import { forTenant, type TenantPrismaClient } from './tenant-client';
 import { prisma } from './client';
 import { PlanNotFoundError, PropertyNotAvailableError } from './plans-service';
 
@@ -129,6 +134,145 @@ export type RecordPaymentResult = {
 };
 
 /**
+ * Transaction client type as exposed inside `forTenant(...).$transaction(async (tx) => ...)`.
+ * Captures the tenant-scoped extension so injected tenantId still applies inside the callback.
+ */
+export type TenantTransactionClient = Parameters<
+  Parameters<TenantPrismaClient['$transaction']>[0]
+>[0];
+
+export type InstallmentForPayment = {
+  id: string;
+  sequenceNo: number;
+  dueDate: Date;
+  amountDueKobo: Kobo;
+  amountPaidKobo: Kobo;
+  status: InstallmentStatus;
+};
+
+export type PlanForPayment = {
+  id: string;
+  propertyId: string;
+  status: PlanStatus;
+  property: { id: string; status: PropertyStatus };
+};
+
+export type PreparedAllocations = ReadonlyArray<{ installmentId: string; amountKobo: Kobo }>;
+
+export type PaymentWriteInput = {
+  amountKobo: Kobo;
+  paidAt: Date;
+  method: PaymentMethod;
+  reference?: string;
+  notes?: string;
+};
+
+/**
+ * Internal helper — the post-validation write phase shared by `recordPayment`
+ * and `plans-service.createPlan`'s `depositReceived: true` branch.
+ *
+ * Callers MUST have already:
+ *   - re-read the plan inside the active transaction
+ *   - validated plan status (not COMPLETED/CANCELLED/DEFAULTED)
+ *   - validated paidAt vs plan.startDate
+ *   - computed and validated the allocation list (FIFO or manual)
+ *
+ * This helper performs:
+ *   1. Payment row insert
+ *   2. PaymentAllocation rows + Installment paid/status updates (via deriveInstallmentStatus)
+ *   3. Plan transitions:
+ *      - DRAFT → ACTIVE (or COMPLETED if everything is now paid) + property AVAILABLE → SOLD
+ *      - ACTIVE → COMPLETED when every installment is fully paid
+ *
+ * NOT exported via index.ts — keep this private to the M4 service layer.
+ */
+export async function applyPayment(
+  tx: TenantTransactionClient,
+  plan: PlanForPayment,
+  installments: InstallmentForPayment[],
+  paymentInput: PaymentWriteInput,
+  allocations: PreparedAllocations,
+  recordedByUserId: string,
+): Promise<{ paymentId: string; planStatus: PlanStatus }> {
+  const paymentData = {
+    planId: plan.id,
+    amountKobo: paymentInput.amountKobo,
+    paidAt: paymentInput.paidAt,
+    method: paymentInput.method,
+    reference: paymentInput.reference ?? null,
+    notes: paymentInput.notes ?? null,
+    recordedBy: recordedByUserId,
+  } satisfies Omit<Prisma.PaymentUncheckedCreateInput, 'tenantId'>;
+  const payment = await tx.payment.create({
+    data: paymentData as unknown as Prisma.PaymentUncheckedCreateInput,
+  });
+
+  // Local copy of installment state so we can decide allPaid after the loop
+  // without re-querying.
+  const installmentState = installments.map((i) => ({
+    id: i.id,
+    sequenceNo: i.sequenceNo,
+    amountDueKobo: i.amountDueKobo,
+    amountPaidKobo: i.amountPaidKobo,
+    dueDate: i.dueDate,
+    status: i.status,
+  }));
+  const stateById = new Map(installmentState.map((i) => [i.id, i]));
+
+  const today = new Date();
+  for (const alloc of allocations) {
+    const allocData = {
+      paymentId: payment.id,
+      installmentId: alloc.installmentId,
+      amountKobo: alloc.amountKobo,
+    } satisfies Omit<Prisma.PaymentAllocationUncheckedCreateInput, 'tenantId'>;
+    await tx.paymentAllocation.create({
+      data: allocData as unknown as Prisma.PaymentAllocationUncheckedCreateInput,
+    });
+    const inst = stateById.get(alloc.installmentId)!;
+    const newPaid = (inst.amountPaidKobo + alloc.amountKobo) as Kobo;
+    const newStatus = deriveInstallmentStatus({
+      amountDueKobo: inst.amountDueKobo,
+      amountPaidKobo: newPaid,
+      dueDate: inst.dueDate,
+      currentStatus: inst.status,
+      today,
+    });
+    await tx.installment.update({
+      where: { id: alloc.installmentId },
+      data: { amountPaidKobo: newPaid, status: newStatus },
+    });
+    inst.amountPaidKobo = newPaid;
+    inst.status = newStatus;
+  }
+
+  const allPaid = installmentState.every((i) => i.amountPaidKobo >= i.amountDueKobo);
+  let nextStatus: PlanStatus = plan.status;
+
+  if (plan.status === 'DRAFT') {
+    nextStatus = allPaid ? 'COMPLETED' : 'ACTIVE';
+    await tx.plan.update({
+      where: { id: plan.id },
+      data: { status: nextStatus },
+    });
+    if (plan.property.status === 'AVAILABLE') {
+      await tx.property.update({
+        where: { id: plan.propertyId },
+        data: { status: 'SOLD' },
+      });
+    }
+  } else if (allPaid) {
+    nextStatus = 'COMPLETED';
+    await tx.plan.update({
+      where: { id: plan.id },
+      data: { status: 'COMPLETED' },
+    });
+  }
+
+  return { paymentId: payment.id, planStatus: nextStatus };
+}
+
+/**
  * Compare two dates by calendar day (UTC). `startDate` is a `@db.Date` column
  * so it always lands at 00:00:00 UTC, while `paidAt` is a `DateTime` and may
  * carry a wall-clock time. We reject when the paid day is strictly before the
@@ -238,92 +382,37 @@ export async function recordPayment(
           }));
         }
 
-        const paymentData = {
-          planId: input.planId,
-          amountKobo: input.amountKobo,
-          paidAt: input.paidAt,
-          method: input.method,
-          reference: input.reference ?? null,
-          notes: input.notes ?? null,
-          recordedBy: ctx.user.id,
-        } satisfies Omit<Prisma.PaymentUncheckedCreateInput, 'tenantId'>;
-        const payment = await tx.payment.create({
-          data: paymentData as unknown as Prisma.PaymentUncheckedCreateInput,
-        });
-
-        // Build a local copy of installment state so we can both compute the
-        // post-payment status (DRAFT→ACTIVE→COMPLETED in one shot) and feed
-        // deriveInstallmentStatus the right currentStatus for each row.
-        const installmentState = plan.installments.map((i) => ({
+        const installmentsForWrite: InstallmentForPayment[] = plan.installments.map((i) => ({
           id: i.id,
           sequenceNo: i.sequenceNo,
+          dueDate: i.dueDate,
           amountDueKobo: i.amountDueKobo as Kobo,
           amountPaidKobo: i.amountPaidKobo as Kobo,
-          dueDate: i.dueDate,
           status: i.status,
         }));
-        const stateById = new Map(installmentState.map((i) => [i.id, i]));
-
-        const today = new Date();
-        for (const alloc of allocations) {
-          const allocData = {
-            paymentId: payment.id,
-            installmentId: alloc.installmentId,
-            amountKobo: alloc.amountKobo,
-          } satisfies Omit<Prisma.PaymentAllocationUncheckedCreateInput, 'tenantId'>;
-          await tx.paymentAllocation.create({
-            data: allocData as unknown as Prisma.PaymentAllocationUncheckedCreateInput,
-          });
-          const inst = stateById.get(alloc.installmentId)!;
-          const newPaid = (inst.amountPaidKobo + alloc.amountKobo) as Kobo;
-          const newStatus = deriveInstallmentStatus({
-            amountDueKobo: inst.amountDueKobo,
-            amountPaidKobo: newPaid,
-            dueDate: inst.dueDate,
-            currentStatus: inst.status,
-            today,
-          });
-          await tx.installment.update({
-            where: { id: alloc.installmentId },
-            data: { amountPaidKobo: newPaid, status: newStatus },
-          });
-          // Local mutation is deliberate: installmentState is a transaction-scoped copy
-          // used to compute the post-write allPaid check without a second findMany.
-          inst.amountPaidKobo = newPaid;
-          inst.status = newStatus;
-        }
-
-        // Plan + property state transitions. Collapse DRAFT→ACTIVE→COMPLETED
-        // into a single plan.update by computing the final status up-front.
-        const allPaid = installmentState.every(
-          (i) => i.amountPaidKobo >= i.amountDueKobo,
+        const { paymentId, planStatus } = await applyPayment(
+          tx,
+          {
+            id: plan.id,
+            propertyId: plan.propertyId,
+            status: plan.status,
+            property: { id: plan.property.id, status: plan.property.status },
+          },
+          installmentsForWrite,
+          {
+            amountKobo: input.amountKobo,
+            paidAt: input.paidAt,
+            method: input.method,
+            reference: input.reference,
+            notes: input.notes,
+          },
+          allocations,
+          ctx.user.id,
         );
-        let nextStatus: PlanStatus = plan.status;
-
-        if (plan.status === 'DRAFT') {
-          nextStatus = allPaid ? 'COMPLETED' : 'ACTIVE';
-          await tx.plan.update({
-            where: { id: plan.id },
-            data: { status: nextStatus },
-          });
-          // Property auto-flip is idempotent: only write if AVAILABLE.
-          if (plan.property.status === 'AVAILABLE') {
-            await tx.property.update({
-              where: { id: plan.propertyId },
-              data: { status: 'SOLD' },
-            });
-          }
-        } else if (allPaid) {
-          nextStatus = 'COMPLETED';
-          await tx.plan.update({
-            where: { id: plan.id },
-            data: { status: 'COMPLETED' },
-          });
-        }
 
         return {
-          paymentId: payment.id,
-          planStatus: nextStatus,
+          paymentId,
+          planStatus,
           remainderKobo: 0n as Kobo,
         };
       },
