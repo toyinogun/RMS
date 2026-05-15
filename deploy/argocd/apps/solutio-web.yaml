@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: solutio-web
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    # ArgoCD Image Updater configuration — watches the registry and writes the
+    # resolved digest back into deploy/k8s/web/kustomization.yaml's images: block.
+    argocd-image-updater.argoproj.io/image-list: "web=repo.toyintest.org/solutio-web"
+    argocd-image-updater.argoproj.io/web.update-strategy: digest
+    argocd-image-updater.argoproj.io/write-back-method: "git:secret:argocd/git-creds"
+    argocd-image-updater.argoproj.io/write-back-target: "kustomization:deploy/k8s/web"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/toyinogun/RMS.git
+    path: deploy/k8s/web
+    targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: solutio-prod
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
