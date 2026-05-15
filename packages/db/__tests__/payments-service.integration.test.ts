@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { startPostgres, type TestPostgres } from './_helpers/postgres.js';
 import {
   recordPayment,
+  listPaymentsForPlan,
   PlanNotPayableError,
   PaymentBeforePlanStartError,
   PaymentOverpayError,
@@ -21,20 +22,26 @@ import type { PlanCreateInput } from '@solutio/shared/installments';
 
 let pg: TestPostgres;
 const TENANT_A = '01935b7e-0002-7000-8000-000000000001';
+const TENANT_B = '01935b7e-0002-7000-8000-000000000002';
 
 const USER_ID = '01935b7e-0002-7000-8000-aaaaaaaaaaaa';
 const AUTH_USER_ID = '01935b7e-0002-7000-8000-bbbbbbbbbbbb';
+const USER_ID_B = '01935b7e-0002-7000-8000-cccccccccccc';
+const AUTH_USER_ID_B = '01935b7e-0002-7000-8000-dddddddddddd';
 
-const ctxFor = (tenantId: string): TenantContext => ({
-  tenantId,
-  user: {
-    id: USER_ID,
-    authUserId: AUTH_USER_ID,
-    role: 'OWNER',
-    email: 'owner@payments-test',
-    mustChangePassword: false,
-  },
-});
+const ctxFor = (tenantId: string): TenantContext => {
+  const isB = tenantId === TENANT_B;
+  return {
+    tenantId,
+    user: {
+      id: isB ? USER_ID_B : USER_ID,
+      authUserId: isB ? AUTH_USER_ID_B : AUTH_USER_ID,
+      role: 'OWNER',
+      email: isB ? 'owner@payments-test-b' : 'owner@payments-test',
+      mustChangePassword: false,
+    },
+  };
+};
 
 const fixedStart = () => new Date('2026-06-01T00:00:00Z');
 const onStartDay = () => new Date('2026-06-01T10:00:00Z');
@@ -94,18 +101,31 @@ const seedDraftPlan = async (
 
 beforeAll(async () => {
   pg = await startPostgres();
-  await pg.prisma.tenant.create({
-    data: { id: TENANT_A, slug: 'payments-tenant-a', name: 'A' },
+  await pg.prisma.tenant.createMany({
+    data: [
+      { id: TENANT_A, slug: 'payments-tenant-a', name: 'A' },
+      { id: TENANT_B, slug: 'payments-tenant-b', name: 'B' },
+    ],
   });
-  await pg.prisma.user.create({
-    data: {
-      id: USER_ID,
-      tenantId: TENANT_A,
-      authUserId: AUTH_USER_ID,
-      email: 'owner@payments-test',
-      name: 'Owner',
-      role: 'OWNER',
-    },
+  await pg.prisma.user.createMany({
+    data: [
+      {
+        id: USER_ID,
+        tenantId: TENANT_A,
+        authUserId: AUTH_USER_ID,
+        email: 'owner@payments-test',
+        name: 'Owner A',
+        role: 'OWNER',
+      },
+      {
+        id: USER_ID_B,
+        tenantId: TENANT_B,
+        authUserId: AUTH_USER_ID_B,
+        email: 'owner@payments-test-b',
+        name: 'Owner B',
+        role: 'OWNER',
+      },
+    ],
   });
 }, 120_000);
 
@@ -217,6 +237,145 @@ describe('recordPayment — FIFO happy paths', () => {
 
     const prop = await pg.prisma.property.findUnique({ where: { id: property.id } });
     expect(prop!.status).toBe('SOLD');
+  });
+});
+
+describe('listPaymentsForPlan', () => {
+  test('returns [] for a plan with no payments', async () => {
+    const ctx = ctxFor(TENANT_A);
+    const property = await seedAvailableProperty(TENANT_A);
+    const customer = await seedCustomer(TENANT_A);
+    const planId = await seedDraftPlan(ctx, property.id, customer.id);
+
+    const rows = await listPaymentsForPlan(ctx, planId);
+    expect(rows).toEqual([]);
+  });
+
+  test('orders payments by paidAt DESC (most recent first)', async () => {
+    const ctx = ctxFor(TENANT_A);
+    const property = await seedAvailableProperty(TENANT_A);
+    const customer = await seedCustomer(TENANT_A);
+    const planId = await seedDraftPlan(ctx, property.id, customer.id);
+
+    // Record three payments with strictly increasing paidAt values. Each pays
+    // exactly one installment so allocation math doesn't fight the test.
+    await recordPayment(ctx, {
+      planId,
+      amountKobo: 2_400_000_00n as Kobo,
+      paidAt: new Date('2026-06-01T08:00:00Z'),
+      method: 'TRANSFER',
+    });
+    await recordPayment(ctx, {
+      planId,
+      amountKobo: 800_000_00n as Kobo,
+      paidAt: new Date('2026-06-15T08:00:00Z'),
+      method: 'CASH',
+    });
+    await recordPayment(ctx, {
+      planId,
+      amountKobo: 800_000_00n as Kobo,
+      paidAt: new Date('2026-07-01T08:00:00Z'),
+      method: 'TRANSFER',
+    });
+
+    const rows = await listPaymentsForPlan(ctx, planId);
+    expect(rows).toHaveLength(3);
+    expect(rows[0]!.paidAt.toISOString()).toBe('2026-07-01T08:00:00.000Z');
+    expect(rows[1]!.paidAt.toISOString()).toBe('2026-06-15T08:00:00.000Z');
+    expect(rows[2]!.paidAt.toISOString()).toBe('2026-06-01T08:00:00.000Z');
+    expect(rows[0]!.recordedByName).toBe('Owner A');
+  });
+
+  test('includes per-payment allocations with installment sequenceNos (manual split across 2)', async () => {
+    const ctx = ctxFor(TENANT_A);
+    const property = await seedAvailableProperty(TENANT_A);
+    const customer = await seedCustomer(TENANT_A);
+    const planId = await seedDraftPlan(ctx, property.id, customer.id);
+
+    // Activate plan with the deposit (FIFO).
+    await recordPayment(ctx, {
+      planId,
+      amountKobo: 2_400_000_00n as Kobo,
+      paidAt: onStartDay(),
+      method: 'TRANSFER',
+    });
+
+    const plan = await getPlan(ctx, planId);
+    const inst1 = plan!.installments.find((i) => i.sequenceNo === 1)!;
+    const inst2 = plan!.installments.find((i) => i.sequenceNo === 2)!;
+
+    // Manual override: split a single payment across two installments.
+    await recordPayment(ctx, {
+      planId,
+      amountKobo: 1_000_000_00n as Kobo,
+      paidAt: new Date('2026-06-20T08:00:00Z'),
+      method: 'CASH',
+      allocations: [
+        { installmentId: inst1.id, amountKobo: 800_000_00n as Kobo },
+        { installmentId: inst2.id, amountKobo: 200_000_00n as Kobo },
+      ],
+    } as PaymentRecordInput);
+
+    const rows = await listPaymentsForPlan(ctx, planId);
+    expect(rows).toHaveLength(2);
+
+    const splitRow = rows.find((r) => r.amountKobo === 1_000_000_00n)!;
+    expect(splitRow.allocations).toHaveLength(2);
+    expect(splitRow.allocations.map((a) => a.installmentSequenceNo)).toEqual([1, 2]);
+    expect(splitRow.allocations[0]!.amountKobo).toBe(800_000_00n);
+    expect(splitRow.allocations[1]!.amountKobo).toBe(200_000_00n);
+  });
+
+  test("excludes other plans' payments in the same tenant", async () => {
+    const ctx = ctxFor(TENANT_A);
+    const propertyA = await seedAvailableProperty(TENANT_A);
+    const propertyB = await seedAvailableProperty(TENANT_A);
+    const customer = await seedCustomer(TENANT_A);
+    const planA = await seedDraftPlan(ctx, propertyA.id, customer.id);
+    const planB = await seedDraftPlan(ctx, propertyB.id, customer.id);
+
+    await recordPayment(ctx, {
+      planId: planA,
+      amountKobo: 2_400_000_00n as Kobo,
+      paidAt: onStartDay(),
+      method: 'TRANSFER',
+    });
+    await recordPayment(ctx, {
+      planId: planB,
+      amountKobo: 2_400_000_00n as Kobo,
+      paidAt: onStartDay(),
+      method: 'CASH',
+    });
+
+    const rowsA = await listPaymentsForPlan(ctx, planA);
+    const rowsB = await listPaymentsForPlan(ctx, planB);
+    expect(rowsA).toHaveLength(1);
+    expect(rowsB).toHaveLength(1);
+    expect(rowsA[0]!.method).toBe('TRANSFER');
+    expect(rowsB[0]!.method).toBe('CASH');
+  });
+
+  test('tenant isolation — tenant A cannot see tenant B payments', async () => {
+    const ctxA = ctxFor(TENANT_A);
+    const ctxB = ctxFor(TENANT_B);
+
+    const propertyB = await seedAvailableProperty(TENANT_B);
+    const customerB = await seedCustomer(TENANT_B);
+    const planB = await seedDraftPlan(ctxB, propertyB.id, customerB.id);
+    await recordPayment(ctxB, {
+      planId: planB,
+      amountKobo: 2_400_000_00n as Kobo,
+      paidAt: onStartDay(),
+      method: 'TRANSFER',
+    });
+
+    // Sanity: tenant B sees its own row.
+    const rowsB = await listPaymentsForPlan(ctxB, planB);
+    expect(rowsB).toHaveLength(1);
+
+    // Tenant A asking for tenant B's planId gets nothing back.
+    const leak = await listPaymentsForPlan(ctxA, planB);
+    expect(leak).toEqual([]);
   });
 });
 

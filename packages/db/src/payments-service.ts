@@ -310,6 +310,88 @@ function isPaidAtBeforeStart(paidAt: Date, startDate: Date): boolean {
  * All writes happen in a single SERIALIZABLE transaction. Loss of the write
  * race surfaces as PaymentRetryableSerializationError so the caller can retry.
  */
+export type PaymentListRow = {
+  id: string;
+  amountKobo: Kobo;
+  paidAt: Date;
+  method: PaymentMethod;
+  reference: string | null;
+  notes: string | null;
+  recordedByUserId: string;
+  /**
+   * Joined from the User table via a secondary findMany (Payment.recordedBy has no
+   * Prisma relation back to User in M4 — we keep the schema unchanged). `null` when
+   * the recorder's User row no longer exists in the tenant scope.
+   */
+  recordedByName: string | null;
+  createdAt: Date;
+  allocations: Array<{
+    id: string;
+    installmentId: string;
+    installmentSequenceNo: number;
+    amountKobo: Kobo;
+  }>;
+};
+
+/**
+ * Tenant-scoped list of payments for a plan, ordered most-recent first.
+ *
+ * Includes per-payment allocations (ordered by installment sequenceNo asc) and
+ * the recorder's display name (joined manually via a second `user.findMany`,
+ * since the M4 schema does not define a Payment → User relation).
+ *
+ * Does not filter or include reversal/reversed metadata — that ships in a
+ * later milestone alongside the reversal workflow itself.
+ */
+export async function listPaymentsForPlan(
+  ctx: TenantContext,
+  planId: string,
+): Promise<PaymentListRow[]> {
+  const scoped = forTenant(prisma, ctx.tenantId);
+
+  const payments = await scoped.payment.findMany({
+    where: { planId },
+    orderBy: { paidAt: 'desc' },
+    include: {
+      allocations: {
+        include: {
+          installment: { select: { sequenceNo: true } },
+        },
+      },
+    },
+  });
+
+  if (payments.length === 0) return [];
+
+  const recorderIds = Array.from(new Set(payments.map((p) => p.recordedBy)));
+  const users = await scoped.user.findMany({
+    where: { id: { in: recorderIds } },
+    select: { id: true, name: true },
+  });
+  const nameById = new Map(users.map((u) => [u.id, u.name]));
+
+  return payments.map((p) => ({
+    id: p.id,
+    amountKobo: p.amountKobo as Kobo,
+    paidAt: p.paidAt,
+    method: p.method,
+    reference: p.reference,
+    notes: p.notes,
+    recordedByUserId: p.recordedBy,
+    recordedByName: nameById.get(p.recordedBy) ?? null,
+    createdAt: p.createdAt,
+    allocations: p.allocations
+      .slice()
+      .sort((a, b) => a.installment.sequenceNo - b.installment.sequenceNo)
+      .map((a) => ({
+        id: a.id,
+        installmentId: a.installmentId,
+        installmentSequenceNo: a.installment.sequenceNo,
+        amountKobo: a.amountKobo as Kobo,
+      })),
+  }));
+}
+
 export async function recordPayment(
   ctx: TenantContext,
   input: PaymentRecordInput,

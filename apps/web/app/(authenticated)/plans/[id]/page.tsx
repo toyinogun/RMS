@@ -4,10 +4,13 @@ import type { Route } from 'next';
 import { getTenantContext } from '@/lib/tenant-context';
 import { hasRole } from '@solutio/shared/tenant';
 import { getPlan } from '@solutio/db/plans-service';
+import { listPaymentsForPlan } from '@solutio/db/payments-service';
 import { formatKobo, type Kobo } from '@solutio/shared/money';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { InstallmentsTable } from '@/components/plans/installments-table';
+import { PaymentsList } from '@/components/plans/payments-list';
 import { PlanCancelButton } from '@/components/plans/plan-cancel-button';
 
 export const dynamic = 'force-dynamic';
@@ -33,8 +36,10 @@ export default async function PlanDetailPage({
   const { id } = await params;
   const plan = await getPlan(ctx, id);
   if (!plan) notFound();
+  const payments = await listPaymentsForPlan(ctx, plan.id);
 
   const canCancel = plan.status === 'DRAFT' && hasRole(ctx, ['OWNER', 'ADMIN']);
+  const canRecordPayment = plan.status === 'ACTIVE';
 
   return (
     <section className="space-y-6">
@@ -45,6 +50,11 @@ export default async function PlanDetailPage({
           </h1>
           <div className="flex items-center gap-3">
             <Badge variant={statusVariant[plan.status] ?? 'outline'}>{plan.status}</Badge>
+            {canRecordPayment ? (
+              <Link href={`/plans/${plan.id}/payments/new` as Route}>
+                <Button>Record payment</Button>
+              </Link>
+            ) : null}
             {canCancel ? <PlanCancelButton id={plan.id} /> : null}
           </div>
         </div>
@@ -91,9 +101,7 @@ export default async function PlanDetailPage({
           />
         </TabsContent>
         <TabsContent value="payments">
-          <div className="rounded-md border p-6 text-center text-sm text-slate-500">
-            Payments are recorded in M4.
-          </div>
+          <PaymentsList payments={payments} />
         </TabsContent>
         <TabsContent value="actions">
           <div className="space-y-2 rounded-md border p-6 text-sm text-slate-500">

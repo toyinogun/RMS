@@ -3,6 +3,7 @@ export { forTenant, CrossTenantWriteError } from './tenant-client';
 export type { TenantPrismaClient } from './tenant-client';
 export {
   recordPayment,
+  listPaymentsForPlan,
   PlanNotPayableError,
   PaymentBeforePlanStartError,
   PaymentOverpayError,
@@ -12,7 +13,11 @@ export {
   AllocationExceedsOutstandingError,
   PaymentRetryableSerializationError,
 } from './payments-service';
-export type { PaymentRecordInput, RecordPaymentResult } from './payments-service';
+export type {
+  PaymentRecordInput,
+  RecordPaymentResult,
+  PaymentListRow,
+} from './payments-service';
 export type * from '@prisma/client';
 export {
   createCustomer,
