@@ -18,6 +18,12 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
+        # 65532 is the UID of the `nonroot` user in distroless images. Kubelet
+        # cannot verify a non-numeric image USER directive against
+        # runAsNonRoot, so the UID is set explicitly here.
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: web
