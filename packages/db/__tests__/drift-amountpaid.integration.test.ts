@@ -24,7 +24,7 @@ const ctx = (): TenantContext => ({
 
 beforeAll(async () => {
   pg = await startPostgres();
-});
+}, 60_000);
 
 afterAll(async () => {
   await pg?.stop();

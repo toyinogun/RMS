@@ -14,7 +14,7 @@ beforeAll(async () => {
       { id: TENANT_B, slug: 'tenant-b', name: 'Tenant B' },
     ],
   });
-});
+}, 60_000);
 
 afterAll(async () => {
   await pg?.stop();
