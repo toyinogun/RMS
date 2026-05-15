@@ -15,6 +15,12 @@ vi.mock('@solutio/db/plans-service', () => ({
       this.name = 'CustomerNotFoundError';
     }
   },
+  PlanCreateRetryableSerializationError: class PlanCreateRetryableSerializationError extends Error {
+    constructor() {
+      super('Concurrent update aborted plan creation. Retry suggested.');
+      this.name = 'PlanCreateRetryableSerializationError';
+    }
+  },
 }));
 vi.mock('@solutio/db/client', () => ({ prisma: {} }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
@@ -24,6 +30,7 @@ import {
   createPlan,
   PropertyNotAvailableError,
   CustomerNotFoundError,
+  PlanCreateRetryableSerializationError,
 } from '@solutio/db/plans-service';
 import { revalidatePath } from 'next/cache';
 import { createPlanAction } from '../plans/create';
@@ -186,6 +193,29 @@ describe('createPlanAction', () => {
     getTenantContextMock.mockResolvedValue(staffCtx);
     createPlanMock.mockRejectedValue(new Error('db gone'));
     await expect(createPlanAction(null, baseValidFd())).rejects.toThrow('db gone');
+  });
+
+  test('retries once on PlanCreateRetryableSerializationError and succeeds', async () => {
+    getTenantContextMock.mockResolvedValue(staffCtx);
+    createPlanMock
+      .mockRejectedValueOnce(new PlanCreateRetryableSerializationError())
+      .mockResolvedValueOnce({ id: validId });
+    const res = await createPlanAction(null, baseValidFd());
+    expect(res).toEqual({ ok: true, data: { id: validId } });
+    expect(createPlanMock).toHaveBeenCalledTimes(2);
+  });
+
+  test('returns friendly message when both attempts fail with serialization error', async () => {
+    getTenantContextMock.mockResolvedValue(staffCtx);
+    createPlanMock
+      .mockRejectedValueOnce(new PlanCreateRetryableSerializationError())
+      .mockRejectedValueOnce(new PlanCreateRetryableSerializationError());
+    const res = await createPlanAction(null, baseValidFd());
+    expect(res).toEqual({
+      ok: false,
+      message: 'Could not create plan due to a concurrent update. Try again.',
+    });
+    expect(createPlanMock).toHaveBeenCalledTimes(2);
   });
 
   test('accepts new-customer payload', async () => {

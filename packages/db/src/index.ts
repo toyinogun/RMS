@@ -43,4 +43,5 @@ export {
   PlanNotFoundError,
   PlanHasPaymentsError,
   PropertyNotAvailableError,
+  PlanCreateRetryableSerializationError,
 } from './plans-service';

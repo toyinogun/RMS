@@ -12,7 +12,7 @@ import type { TenantContext } from '@solutio/shared/tenant';
 import { deriveInstallmentStatus } from '@solutio/shared/installments';
 import { forTenant, type TenantPrismaClient } from './tenant-client';
 import { prisma } from './client';
-import { PlanNotFoundError, PropertyNotAvailableError } from './plans-service';
+import { PlanNotFoundError, PropertyNotAvailableError } from './plan-errors';
 
 export { PlanNotFoundError, PropertyNotAvailableError };
 
@@ -242,6 +242,8 @@ export async function applyPayment(
       where: { id: alloc.installmentId },
       data: { amountPaidKobo: newPaid, status: newStatus },
     });
+    // Local mutation is deliberate: installmentState is a transaction-scoped copy
+    // used to compute the post-write allPaid check without a second findMany.
     inst.amountPaidKobo = newPaid;
     inst.status = newStatus;
   }

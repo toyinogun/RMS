@@ -190,16 +190,14 @@ describe('plans-service.createPlan', () => {
   test('depositReceived: true records deposit + flips plan ACTIVE + property SOLD', async () => {
     const ctx = ctxFor(TENANT_A);
     const property = await seedAvailableProperty(TENANT_A);
-    const { id } = await createPlan(
-      ctx,
-      baseCreateInput({
-        propertyId: property.id,
-        depositReceived: true,
-        depositMethod: 'CASH',
-        depositReference: 'TEL-001',
-        depositNotes: 'walk-in',
-      }),
-    );
+    const input = baseCreateInput({
+      propertyId: property.id,
+      depositReceived: true,
+      depositMethod: 'CASH',
+      depositReference: 'TEL-001',
+      depositNotes: 'walk-in',
+    });
+    const { id } = await createPlan(ctx, input);
 
     const plan = await pg.prisma.plan.findUnique({
       where: { id },
@@ -222,6 +220,10 @@ describe('plans-service.createPlan', () => {
     expect(payments[0]!.reference).toBe('TEL-001');
     expect(payments[0]!.notes).toBe('walk-in');
     expect(payments[0]!.recordedBy).toBe(ctx.user.id);
+    // depositPaidAt was omitted from the input — service defaults it to startDate.
+    expect(payments[0]!.paidAt.toISOString().slice(0, 10)).toBe(
+      input.startDate.toISOString().slice(0, 10),
+    );
 
     const allocations = await pg.prisma.paymentAllocation.findMany({
       where: { paymentId: payments[0]!.id },
