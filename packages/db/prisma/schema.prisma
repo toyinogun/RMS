@@ -39,6 +39,7 @@ model User {
   name               String
   role               UserRole
   mustChangePassword Boolean  @default(false)
+  deactivatedAt      DateTime?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -197,6 +198,7 @@ model Payment {
   reversedBy  Payment?            @relation("PaymentReversal", fields: [reversedById], references: [id])
   reverses    Payment[]           @relation("PaymentReversal")
 
+  @@unique([reversedById])
   @@index([tenantId, planId, paidAt])
   @@schema("public")
 }
