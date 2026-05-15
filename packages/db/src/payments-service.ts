@@ -3,7 +3,7 @@ import { allocatePayment } from '@solutio/shared/payments';
 import type { Kobo } from '@solutio/shared/money';
 import type { TenantContext } from '@solutio/shared/tenant';
 import { deriveInstallmentStatus } from '@solutio/shared/installments';
-import { forTenant } from './tenant-client.js';
+import { forTenant } from './tenant-client';
 
 export type RecordPaymentInput = {
   planId: string;

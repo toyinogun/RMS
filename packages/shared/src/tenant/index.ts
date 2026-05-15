@@ -1,2 +1,2 @@
-export * from './context.js';
-export * from './role.js';
+export * from './context';
+export * from './role';

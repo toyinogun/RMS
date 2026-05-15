@@ -1,4 +1,4 @@
-import type { Kobo } from '../money/index.js';
+import type { Kobo } from '../money/index';
 
 export type InstallmentStatus = 'PENDING' | 'PARTIAL' | 'PAID' | 'OVERDUE' | 'WAIVED';
 

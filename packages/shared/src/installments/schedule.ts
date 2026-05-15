@@ -1,5 +1,5 @@
-import type { Kobo } from '../money/index.js';
-import type { ScheduleInput, ScheduleRow } from './types.js';
+import type { Kobo } from '../money/index';
+import type { ScheduleInput, ScheduleRow } from './types';
 
 const MIN_TERM = 6;
 const MAX_TERM = 36;

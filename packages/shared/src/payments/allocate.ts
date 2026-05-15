@@ -1,5 +1,5 @@
-import type { Kobo } from '../money/index.js';
-import type { AllocationResult, InstallmentRow } from './types.js';
+import type { Kobo } from '../money/index';
+import type { AllocationResult, InstallmentRow } from './types';
 
 /**
  * Pure function — allocates a positive payment amount across installments

@@ -9,7 +9,9 @@
     "./installments": "./src/installments/index.ts",
     "./payments": "./src/payments/index.ts",
     "./money": "./src/money/index.ts",
-    "./tenant": "./src/tenant/index.ts"
+    "./tenant": "./src/tenant/index.ts",
+    "./customers": "./src/customers/index.ts",
+    "./properties": "./src/properties/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

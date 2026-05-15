@@ -1,5 +1,5 @@
-import type { Kobo } from '../money/index.js';
-import type { InstallmentStatus } from './types.js';
+import type { Kobo } from '../money/index';
+import type { InstallmentStatus } from './types';
 
 export type DeriveStatusInput = {
   amountDueKobo: Kobo;
