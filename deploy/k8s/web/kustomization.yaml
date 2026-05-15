@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: solutio-prod
+resources:
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+  - hpa.yaml
+images:
+  # ArgoCD Image Updater writes the live digest here. The placeholder ensures
+  # `kubectl kustomize` validates the manifest until the first push to main.
+  - name: repo.toyintest.org/solutio-web
+    newTag: placeholder
