@@ -222,7 +222,7 @@ model PaymentAllocation {
 // Domain `User.authUserId` references AuthUser.id.
 
 model AuthUser {
-  id            String    @id @db.Uuid
+  id            String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
   email         String    @unique
   emailVerified Boolean   @default(false)
   name          String?
@@ -238,7 +238,7 @@ model AuthUser {
 }
 
 model Session {
-  id        String   @id @db.Uuid
+  id        String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
   userId    String   @db.Uuid
   token     String   @unique
   expiresAt DateTime
@@ -255,7 +255,7 @@ model Session {
 }
 
 model Account {
-  id                    String    @id @db.Uuid
+  id                    String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
   userId                String    @db.Uuid
   providerId            String
   accountId             String
@@ -277,7 +277,7 @@ model Account {
 }
 
 model Verification {
-  id         String    @id @db.Uuid
+  id         String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
   identifier String
   value      String
   expiresAt  DateTime
