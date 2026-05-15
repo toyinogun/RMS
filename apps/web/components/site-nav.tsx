@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { Route } from 'next';
 import type { UserRole } from '@solutio/shared';
 import { signOutAction } from '@/server-actions/sign-out';
+import { cn } from '@/lib/utils';
 
 type NavItem = { href: Route; label: string; ownerOnly?: boolean };
 
@@ -33,11 +34,10 @@ export function SiteNav({ currentPath, userEmail, role }: SiteNavProps) {
                 <Link
                   href={item.href}
                   aria-current={active ? 'page' : undefined}
-                  className={
-                    active
-                      ? 'border-b-2 border-slate-900 pb-1 font-medium text-slate-900'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }
+                  className={cn(
+                    'text-slate-600 hover:text-slate-900',
+                    active && 'border-b-2 border-slate-900 pb-1 font-medium text-slate-900',
+                  )}
                 >
                   {item.label}
                 </Link>
