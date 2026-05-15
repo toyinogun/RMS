@@ -1,2 +1,2 @@
-export * from './allocate.js';
-export type * from './types.js';
+export * from './allocate';
+export type * from './types';

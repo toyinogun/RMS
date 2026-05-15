@@ -5,7 +5,7 @@ import type {
   PropertyUpdateInput,
   PropertyStatusInput,
 } from '@solutio/shared/properties';
-import { forTenant } from './tenant-client.js';
+import { forTenant } from './tenant-client';
 
 export class PropertyNotFoundError extends Error {
   constructor(id: string) {

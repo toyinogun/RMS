@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import type { Route } from 'next';
 import { formatKobo, type Kobo } from '@solutio/shared/money';
 import type { PropertyActionState } from '@/server-actions/properties/create';
 import { Input } from '@/components/ui/input';
@@ -83,7 +84,7 @@ export function PropertyForm({ mode, onSubmit, variant = 'page', initial }: Prop
     }
 
     if (variant === 'page') {
-      router.push('/properties');
+      router.push('/properties' as Route);
       router.refresh();
     }
   });
@@ -177,7 +178,7 @@ export function PropertyForm({ mode, onSubmit, variant = 'page', initial }: Prop
         </Button>
         {variant === 'page' && (
           <Button variant="outline" asChild>
-            <Link href="/properties">Cancel</Link>
+            <Link href={'/properties' as Route}>Cancel</Link>
           </Button>
         )}
       </div>

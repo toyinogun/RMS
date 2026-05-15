@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { parseNgn } from '../money/parse.js';
+import { parseNgn } from '../money/parse';
 
 const codeRegex = /^[A-Z0-9][A-Z0-9-]{0,31}$/;
 

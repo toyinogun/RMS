@@ -1,4 +1,4 @@
-import type { TenantContext, UserRole } from './context.js';
+import type { TenantContext, UserRole } from './context';
 
 export class ForbiddenError extends Error {
   constructor(required: UserRole[], actual: UserRole) {

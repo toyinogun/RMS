@@ -1,7 +1,7 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import type { TenantContext } from '@solutio/shared/tenant';
 import type { CustomerCreateInput, CustomerUpdateInput } from '@solutio/shared/customers';
-import { forTenant } from './tenant-client.js';
+import { forTenant } from './tenant-client';
 
 export class CustomerNotFoundError extends Error {
   constructor(id: string) {

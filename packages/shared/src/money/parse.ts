@@ -1,4 +1,4 @@
-import { koboFromNaira, type Kobo } from './kobo.js';
+import { koboFromNaira, type Kobo } from './kobo';
 
 /**
  * Parse a user-entered Nigerian Naira string into Kobo.

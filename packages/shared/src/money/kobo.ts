@@ -1,6 +1,6 @@
-import type { Kobo } from './types.js';
+import type { Kobo } from './types';
 
-export type { Kobo } from './types.js';
+export type { Kobo } from './types';
 
 /**
  * Convert a naira amount (possibly fractional) to kobo.
