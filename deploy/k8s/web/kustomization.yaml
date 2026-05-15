@@ -6,9 +6,16 @@ resources:
   - service.yaml
   - ingress.yaml
   - hpa.yaml
+  - migrate-job.yaml
+  - seed-job.yaml
 images:
-  # Pinned manually to the 800cc41 release digest until ArgoCD Image Updater
-  # is installed in the cluster. To bump: read the new digest from ghcr's
-  # manifests endpoint and replace below. See README "Updating a version".
+  # Pinned manually until ArgoCD Image Updater is installed in the cluster.
+  # To bump: read the new digest from ghcr's manifests endpoint and replace
+  # below. See README "Updating a version".
   - name: ghcr.io/toyinogun/rms
     digest: sha256:74643f85c4ee4d0d21f6c0a7d1c985ed5953302b49608fa3ffdca4296534911a
+  # rms-migrate uses the rolling :main tag for the bootstrap commit only —
+  # it has no digest yet (this commit introduces the image). The follow-up
+  # commit replaces this with the published digest once CI builds it.
+  - name: ghcr.io/toyinogun/rms-migrate
+    newTag: main

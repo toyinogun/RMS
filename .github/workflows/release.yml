@@ -24,14 +24,27 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push
+      - name: Build and push (runtime)
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f  # v7.1.0
         with:
           context: .
           file: apps/web/Dockerfile
+          target: runtime
           platforms: linux/amd64
           push: true
           tags: |
             ghcr.io/toyinogun/rms:${{ github.sha }}
             ghcr.io/toyinogun/rms:main
+          provenance: false
+      - name: Build and push (migrate)
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f  # v7.1.0
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          target: migrate
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/toyinogun/rms-migrate:${{ github.sha }}
+            ghcr.io/toyinogun/rms-migrate:main
           provenance: false

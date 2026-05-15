@@ -1,0 +1,33 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: solutio-seed
+  namespace: solutio-prod
+  annotations:
+    # Runs after the web Deployment is Synced so the standalone apps/web build
+    # (which the seed dynamically imports for the Better Auth adapter) is on
+    # disk in the matching image. Seed is upsert-idempotent so re-runs are
+    # safe. Recreated each sync.
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 2
+  template:
+    metadata:
+      labels: { app: solutio-seed }
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      containers:
+        - name: seed
+          image: ghcr.io/toyinogun/rms-migrate:placeholder
+          imagePullPolicy: IfNotPresent
+          command: ["pnpm", "--filter", "@solutio/db", "seed"]
+          envFrom:
+            - secretRef: { name: solutio-db }
+            - secretRef: { name: solutio-auth }
+            - secretRef: { name: solutio-seed }
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits:   { cpu: 1000m, memory: 768Mi }

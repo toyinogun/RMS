@@ -35,3 +35,11 @@ COPY --from=build --chown=nonroot:nonroot /app/apps/web/public ./apps/web/public
 
 EXPOSE 3000
 CMD ["apps/web/server.js"]
+
+# ── Stage 4: migrate (used by k8s migration + seed Jobs) ──────────────────────
+# Reuses the build stage which already has the full source, pnpm, prisma CLI,
+# generated client, and tsx. Migration / seed Jobs override CMD to pick the
+# specific operation.
+FROM build AS migrate
+WORKDIR /app
+CMD ["pnpm", "--filter", "@solutio/db", "prisma:migrate:deploy"]
