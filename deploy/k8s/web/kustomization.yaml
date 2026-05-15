@@ -7,7 +7,8 @@ resources:
   - ingress.yaml
   - hpa.yaml
 images:
-  # ArgoCD Image Updater writes the live digest here. The placeholder ensures
-  # `kubectl kustomize` validates the manifest until the first push to main.
+  # Pinned manually to the 800cc41 release digest until ArgoCD Image Updater
+  # is installed in the cluster. To bump: read the new digest from ghcr's
+  # manifests endpoint and replace below. See README "Updating a version".
   - name: ghcr.io/toyinogun/rms
-    newTag: placeholder
+    digest: sha256:74643f85c4ee4d0d21f6c0a7d1c985ed5953302b49608fa3ffdca4296534911a
