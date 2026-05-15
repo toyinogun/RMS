@@ -43,13 +43,15 @@ function statusBadgeVariant(
 export default async function PropertiesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: PropertyStatus }>;
+  searchParams: Promise<{ q?: string; status?: string }>;
 }) {
   const ctx = await getTenantContext();
   if (!ctx) redirect('/login');
 
   const { q, status } = await searchParams;
-  const properties = await listProperties(prisma, ctx, { search: q, status });
+  const validStatus =
+    status === 'AVAILABLE' || status === 'RESERVED' || status === 'SOLD' ? status : undefined;
+  const properties = await listProperties(prisma, ctx, { search: q, status: validStatus });
 
   return (
     <section className="space-y-4">
