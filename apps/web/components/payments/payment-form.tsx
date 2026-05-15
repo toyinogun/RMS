@@ -19,7 +19,10 @@ import {
   type PaymentMethod,
 } from '@solutio/shared/payments';
 import type { InstallmentStatus } from '@solutio/shared/installments';
-import type { PaymentRecordState } from '@/server-actions/payments/record';
+import {
+  PAYMENT_RETRY_FAILURE_MESSAGE,
+  type PaymentRecordState,
+} from '@/server-actions/payments/record';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -55,9 +58,6 @@ const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   CARD_MANUAL: 'Card (manual)',
   OTHER: 'Other',
 };
-
-const RETRY_FAILURE_MESSAGE =
-  'Could not record payment due to a concurrent update. Try again.';
 
 export interface PaymentFormPlan {
   id: string;
@@ -178,7 +178,6 @@ export function PaymentForm({ plan, installments, onSubmit }: PaymentFormProps) 
     handleSubmit,
     setError,
     setValue,
-    watch,
     getValues,
     formState: { errors, isSubmitting },
     control,
@@ -215,12 +214,18 @@ export function PaymentForm({ plan, installments, onSubmit }: PaymentFormProps) 
     );
   }, [amountKobo, nonPaidInstallments]);
 
-  // When the clerk flips into manual mode, pre-fill rows with the current
-  // FIFO suggestion. Flipping back to auto leaves the values alone — they
-  // are simply omitted from FormData on submit.
+  // When the clerk flips into manual mode for the FIRST time, pre-fill rows
+  // with the current FIFO suggestion. Subsequent auto→manual transitions
+  // preserve whatever the clerk last edited — values are simply omitted from
+  // FormData in auto mode and re-appear unchanged when manual is re-selected.
   const prevModeRef = React.useRef<'auto' | 'manual'>(allocationMode);
+  const hasPrefilledRef = React.useRef(false);
   React.useEffect(() => {
-    if (prevModeRef.current === 'auto' && allocationMode === 'manual') {
+    if (
+      prevModeRef.current === 'auto' &&
+      allocationMode === 'manual' &&
+      !hasPrefilledRef.current
+    ) {
       const suggestion: Record<string, Kobo> = {};
       if (preview) {
         for (const a of preview.allocations) {
@@ -235,6 +240,7 @@ export function PaymentForm({ plan, installments, onSubmit }: PaymentFormProps) 
         // leaves `watch('allocations')` stale until the next user keystroke.
         updateAllocation(idx, { ...row, amountNgn: koboToNgnInputString(kobo) });
       });
+      hasPrefilledRef.current = true;
     }
     prevModeRef.current = allocationMode;
   }, [allocationMode, preview, getValues, updateAllocation]);
@@ -332,7 +338,7 @@ export function PaymentForm({ plan, installments, onSubmit }: PaymentFormProps) 
     }
 
     // Concurrent-update retry exhaustion: surface but do not redirect.
-    if (result.message === RETRY_FAILURE_MESSAGE) {
+    if (result.message === PAYMENT_RETRY_FAILURE_MESSAGE) {
       toast.error(result.message);
       return;
     }
@@ -662,7 +668,10 @@ export function PaymentForm({ plan, installments, onSubmit }: PaymentFormProps) 
                       </td>
                       <td
                         data-money
-                        className="px-3 py-2 text-right text-[13px] text-ink-700"
+                        className={cn(
+                          'px-3 py-2 text-right text-[13px]',
+                          afterKobo < 0n ? 'text-status-overdue' : 'text-ink-700',
+                        )}
                       >
                         {formatKobo(afterKobo as Kobo)}
                       </td>

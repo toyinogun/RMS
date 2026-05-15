@@ -19,6 +19,7 @@ vi.mock('sonner', () => ({
 }));
 
 import { PaymentForm } from '../payment-form';
+import { PAYMENT_RETRY_FAILURE_MESSAGE } from '@/server-actions/payments/record';
 
 const PLAN_ID = '550e8400-e29b-41d4-a716-446655440010';
 const INST_1 = '550e8400-e29b-41d4-a716-446655440101';
@@ -248,16 +249,39 @@ describe('PaymentForm', () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue({
       ok: false,
-      message: 'Could not record payment due to a concurrent update. Try again.',
+      message: PAYMENT_RETRY_FAILURE_MESSAGE,
     });
     renderForm(onSubmit);
 
     await user.type(screen.getByLabelText(/amount/i), '100,000');
     await user.click(screen.getByRole('button', { name: /record payment/i }));
 
-    expect(toastErrorMock).toHaveBeenCalledWith(
-      'Could not record payment due to a concurrent update. Try again.',
-    );
+    expect(toastErrorMock).toHaveBeenCalledWith(PAYMENT_RETRY_FAILURE_MESSAGE);
     expect(routerPushMock).not.toHaveBeenCalled();
+  });
+
+  test('toggling back to auto after manual edits retains the edited values (not reset to FIFO)', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(screen.getByLabelText(/amount/i), '150,000');
+    await user.click(screen.getByLabelText(/manual override/i));
+    // FIFO pre-fill is 100,000 / 50,000 / 0. Edit the second row to a non-FIFO value.
+    const allocInputs = screen.getAllByLabelText(/allocation for installment/i);
+    await user.clear(allocInputs[1]!);
+    await user.type(allocInputs[1]!, '30,000');
+    expect((allocInputs[1]! as HTMLInputElement).value).toBe('30,000');
+
+    // Flip back to auto — the editable inputs disappear.
+    await user.click(screen.getByLabelText(/auto \(fifo\)/i));
+    expect(
+      screen.queryAllByLabelText(/allocation for installment/i),
+    ).toHaveLength(0);
+
+    // Flip back to manual — the previously-edited value is still present
+    // (it was not reset back to the FIFO suggestion of 50,000).
+    await user.click(screen.getByLabelText(/manual override/i));
+    const inputs = screen.getAllByLabelText(/allocation for installment/i);
+    expect((inputs[1]! as HTMLInputElement).value).toBe('30,000');
   });
 });

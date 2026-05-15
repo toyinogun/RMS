@@ -26,6 +26,9 @@ type PlanStatus = RecordPaymentResult['planStatus'];
 
 const MAX_ALLOCATION_ROWS = 60; // Plans never exceed 36 installments; 60 leaves headroom.
 
+export const PAYMENT_RETRY_FAILURE_MESSAGE =
+  'Could not record payment due to a concurrent update. Try again.';
+
 export type PaymentRecordState =
   | { ok: true; data: { paymentId: string; planStatus: PlanStatus } }
   | { ok: false; message: string; fieldErrors?: Record<string, string> };
@@ -114,7 +117,7 @@ export async function recordPaymentAction(
         if (retryErr instanceof PaymentRetryableSerializationError) {
           return {
             ok: false,
-            message: 'Could not record payment due to a concurrent update. Try again.',
+            message: PAYMENT_RETRY_FAILURE_MESSAGE,
           };
         }
         return mapRecordPaymentError(retryErr);
