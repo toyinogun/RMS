@@ -63,6 +63,23 @@ describe('paymentRecordSchema', () => {
   test('rejects negative amountNgn', () => {
     const res = paymentRecordSchema.safeParse({ ...baseInput(), amountNgn: '-100' });
     expect(res.success).toBe(false);
+    if (!res.success) {
+      expect(res.error.issues.some((i) => /greater than zero/i.test(i.message))).toBe(true);
+    }
+  });
+
+  test('accepts paidAt exactly at the 1-day grace boundary', () => {
+    const res = paymentRecordSchema.safeParse({ ...baseInput(), paidAt: daysFromNowIso(1) });
+    expect(res.success).toBe(true);
+  });
+
+  test('rejects allocation row with negative amount', () => {
+    const res = paymentRecordSchema.safeParse({
+      ...baseInput(),
+      amountNgn: '100,000',
+      allocations: [{ installmentId: INST_A, amountNgn: '-100' }],
+    });
+    expect(res.success).toBe(false);
   });
 
   test('rejects malformed NGN string', () => {

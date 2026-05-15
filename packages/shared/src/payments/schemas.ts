@@ -1,23 +1,12 @@
 import { z } from 'zod';
-import { parseNgn } from '../money/parse';
+import { ngnAmount } from '../money/zod';
 
 const PAID_AT_GRACE_DAYS = 1;
 const REFERENCE_MAX = 100;
 const NOTES_MAX = 500;
 
-const ngnAmount = (label: string) =>
-  z
-    .string()
-    .trim()
-    .min(1, `${label} is required`)
-    .transform((raw, ctx) => {
-      try {
-        return parseNgn(raw);
-      } catch {
-        ctx.addIssue({ code: 'custom', message: `Invalid ${label.toLowerCase()}` });
-        return z.NEVER;
-      }
-    });
+export const paymentMethodSchema = z.enum(['CASH', 'TRANSFER', 'CHEQUE', 'CARD_MANUAL', 'OTHER']);
+export type PaymentMethod = z.infer<typeof paymentMethodSchema>;
 
 const paidAtSchema = z
   .string()
@@ -61,12 +50,17 @@ const paymentCoreFields = z.object({
   planId: z.string().uuid({ message: 'Invalid plan id' }),
   amountNgn: ngnAmount('Amount'),
   paidAt: paidAtSchema,
-  method: z.enum(['CASH', 'TRANSFER', 'CHEQUE', 'CARD_MANUAL', 'OTHER']),
+  method: paymentMethodSchema,
   reference: optionalTrimmed('Reference', REFERENCE_MAX),
   notes: optionalTrimmed('Notes', NOTES_MAX),
   allocations: z.array(allocationRowSchema).optional(),
 });
 
+/**
+ * Input schema for the record-payment server action. Transforms NGN strings to Kobo (renaming
+ * amountNgn → amountKobo at both top level and per allocation row). When allocations is provided,
+ * the sum of row amountKobo must equal the top-level amountKobo.
+ */
 export const paymentRecordSchema = paymentCoreFields
   .transform(({ amountNgn, ...rest }) => ({
     ...rest,

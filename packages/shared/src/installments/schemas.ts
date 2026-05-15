@@ -1,23 +1,9 @@
 import { z } from 'zod';
-import { parseNgn } from '../money/parse';
+import { ngnAmount } from '../money/zod';
 
 const MIN_TERM = 6;
 const MAX_TERM = 36;
 const START_DATE_GRACE_DAYS = 1;
-
-const ngnAmount = (label: string) =>
-  z
-    .string()
-    .trim()
-    .min(1, `${label} is required`)
-    .transform((raw, ctx) => {
-      try {
-        return parseNgn(raw);
-      } catch {
-        ctx.addIssue({ code: 'custom', message: `Invalid ${label.toLowerCase()}` });
-        return z.NEVER;
-      }
-    });
 
 const startDateSchema = z
   .string()
