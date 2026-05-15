@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guards:
+    name: Pinning guards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - run: bash scripts/check-no-caret.sh
+      - run: bash scripts/check-no-unpinned-from.sh
+      - run: bash scripts/check-no-unpinned-uses.sh
+      - run: bash scripts/check-no-unsealed-secret.sh
+
+  test:
+    name: Lint + typecheck + test
+    runs-on: ubuntu-latest
+    needs: guards
+    env:
+      # Prisma 7's prisma.config.ts evaluates env('DATABASE_URL') eagerly at
+      # config-load, even for `prisma generate` / `prisma validate` which do
+      # not connect. The value just needs to be a parseable URL.
+      DATABASE_URL: postgresql://build:build@localhost:5432/build?schema=public
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093  # v6.0.8
+        with:
+          version: 11.1.1
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm --filter @solutio/db prisma:generate
+      - run: pnpm --filter @solutio/db prisma:validate
+      - run: pnpm --filter @solutio/db prisma:diff
+      - run: pnpm test --coverage.enabled --coverage.thresholds.lines=80 --coverage.thresholds.functions=80 --coverage.thresholds.branches=80 --coverage.thresholds.statements=80
+      - name: Run integration tests
+        run: pnpm test:integration
+        env:
+          # Testcontainers uses the host Docker daemon provided by the runner.
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    needs: test
+    # E2E only runs on PRs targeting main (per spec memory note).
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093  # v6.0.8
+        with: { version: 11.1.1 }
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @solutio/web exec playwright install --with-deps chromium
+      - run: pnpm --filter @solutio/web build
+      - run: pnpm --filter @solutio/web test:e2e
