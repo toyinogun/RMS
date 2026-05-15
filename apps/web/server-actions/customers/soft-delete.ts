@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { prisma } from '@solutio/db/client';
 import { softDeleteCustomer, CustomerHasPlansError, CustomerNotFoundError } from '@solutio/db/customers-service';
 import { getTenantContext } from '@/lib/tenant-context';
-import { requireRole } from '@solutio/shared/tenant';
+import { hasRole } from '@solutio/shared/tenant';
 
 export type SoftDeleteState = { ok: true } | { ok: false; message: string };
 
@@ -17,7 +17,7 @@ export async function softDeleteCustomerAction(
 ): Promise<SoftDeleteState> {
   const ctx = await getTenantContext();
   if (!ctx) return { ok: false, message: 'Not signed in' };
-  requireRole(ctx, ['OWNER', 'ADMIN']);
+  if (!hasRole(ctx, ['OWNER', 'ADMIN'])) return { ok: false, message: 'Forbidden' };
 
   const parsed = idSchema.safeParse({ id: formData.get('id') });
   if (!parsed.success) return { ok: false, message: 'Invalid id' };

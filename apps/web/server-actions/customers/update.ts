@@ -6,7 +6,7 @@ import { customerUpdateSchema } from '@solutio/shared/customers';
 import { prisma } from '@solutio/db/client';
 import { updateCustomer, CustomerNotFoundError } from '@solutio/db/customers-service';
 import { getTenantContext } from '@/lib/tenant-context';
-import { requireRole } from '@solutio/shared/tenant';
+import { hasRole } from '@solutio/shared/tenant';
 import type { CustomerActionState } from './create';
 
 function flattenZod(err: z.ZodError): Record<string, string> {
@@ -24,7 +24,7 @@ export async function updateCustomerAction(
 ): Promise<CustomerActionState> {
   const ctx = await getTenantContext();
   if (!ctx) return { ok: false, message: 'Not signed in' };
-  requireRole(ctx, ['OWNER', 'ADMIN', 'STAFF']);
+  if (!hasRole(ctx, ['OWNER', 'ADMIN', 'STAFF'])) return { ok: false, message: 'Forbidden' };
 
   const parsed = customerUpdateSchema.safeParse({
     id: formData.get('id'),

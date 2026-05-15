@@ -6,7 +6,7 @@ import { customerCreateSchema } from '@solutio/shared/customers';
 import { prisma } from '@solutio/db/client';
 import { createCustomer } from '@solutio/db/customers-service';
 import { getTenantContext } from '@/lib/tenant-context';
-import { requireRole } from '@solutio/shared/tenant';
+import { hasRole } from '@solutio/shared/tenant';
 
 export type CustomerActionState =
   | { ok: true; data: { id: string } }
@@ -27,7 +27,7 @@ export async function createCustomerAction(
 ): Promise<CustomerActionState> {
   const ctx = await getTenantContext();
   if (!ctx) return { ok: false, message: 'Not signed in' };
-  requireRole(ctx, ['OWNER', 'ADMIN', 'STAFF']);
+  if (!hasRole(ctx, ['OWNER', 'ADMIN', 'STAFF'])) return { ok: false, message: 'Forbidden' };
 
   const parsed = customerCreateSchema.safeParse({
     fullName: formData.get('fullName'),
