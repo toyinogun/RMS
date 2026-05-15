@@ -33,6 +33,9 @@ jobs:
       # config-load, even for `prisma generate` / `prisma validate` which do
       # not connect. The value just needs to be a parseable URL.
       DATABASE_URL: postgresql://build:build@localhost:5432/build?schema=public
+      # `pnpm test` runs the integration project too — testcontainers needs
+      # ryuk disabled when run inside ephemeral CI runners.
+      TESTCONTAINERS_RYUK_DISABLED: "true"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093  # v6.0.8
@@ -51,12 +54,11 @@ jobs:
       # prisma:diff (AC #4) requires a shadow Postgres in Prisma 7 — it
       # replays migrations onto a real DB to compute the diff. Run manually
       # against `main` until a postgres service block is wired up here.
+      # `pnpm test` runs all projects including integration (which spins up
+      # testcontainers Postgres). The dedicated `pnpm test:integration` step
+      # from the original plan is dropped — it would re-run integration
+      # tests redundantly.
       - run: pnpm test --coverage.enabled --coverage.thresholds.lines=80 --coverage.thresholds.functions=80 --coverage.thresholds.branches=80 --coverage.thresholds.statements=80
-      - name: Run integration tests
-        run: pnpm test:integration
-        env:
-          # Testcontainers uses the host Docker daemon provided by the runner.
-          TESTCONTAINERS_RYUK_DISABLED: "true"
 
   e2e:
     name: Playwright E2E
