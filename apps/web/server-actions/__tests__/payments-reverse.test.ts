@@ -28,6 +28,21 @@ vi.mock('@solutio/db/payments-service', () => ({
     }
   },
 }));
+vi.mock('@solutio/shared/tenant', async () => {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-imports
+  const actual = await vi.importActual<import('@solutio/shared/tenant')>(
+    '@solutio/shared/tenant',
+  );
+  return {
+    ...actual,
+    ForbiddenError: class ForbiddenError extends Error {
+      constructor(required: string[], actual: string) {
+        super(`Forbidden: required one of [${required.join(', ')}], actor has ${actual}`);
+        this.name = 'ForbiddenError';
+      }
+    },
+  };
+});
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 import { getTenantContext } from '@/lib/tenant-context';
@@ -38,6 +53,7 @@ import {
   CannotReverseReversalRowError,
   PaymentRetryableSerializationError,
 } from '@solutio/db/payments-service';
+import { ForbiddenError } from '@solutio/shared/tenant';
 import { revalidatePath } from 'next/cache';
 import { reversePaymentAction } from '../payments/reverse';
 
@@ -238,6 +254,17 @@ describe('reversePaymentAction', () => {
       message: 'Payment not found.',
     });
     expect(reversePaymentMock).toHaveBeenCalledTimes(2);
+  });
+
+  test('service throws ForbiddenError (role-gate divergence) → M5_FORBIDDEN', async () => {
+    getTenantContextMock.mockResolvedValue(ownerCtx);
+    reversePaymentMock.mockRejectedValue(new ForbiddenError(['OWNER', 'ADMIN'], 'STAFF'));
+    const res = await reversePaymentAction(undefined, mkFormData());
+    expect(res).toEqual({
+      ok: false,
+      code: 'M5_FORBIDDEN',
+      message: 'Only owners and admins can reverse payments.',
+    });
   });
 
   test('re-throws unexpected errors', async () => {

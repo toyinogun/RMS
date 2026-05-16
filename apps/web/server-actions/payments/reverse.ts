@@ -12,7 +12,7 @@ import {
 } from '@solutio/db/payments-service';
 import type { ReversePaymentResult } from '@solutio/db/payments-service';
 import { getTenantContext } from '@/lib/tenant-context';
-import { hasRole } from '@solutio/shared/tenant';
+import { hasRole, ForbiddenError } from '@solutio/shared/tenant';
 import {
   REVERSAL_RETRY_FAILURE_MESSAGE,
   REVERSAL_FORBIDDEN_MESSAGE,
@@ -103,6 +103,9 @@ export async function reversePaymentAction(
 }
 
 function mapReversePaymentError(err: unknown): PaymentReverseState {
+  if (err instanceof ForbiddenError) {
+    return { ok: false, code: 'M5_FORBIDDEN', message: REVERSAL_FORBIDDEN_MESSAGE };
+  }
   if (err instanceof PaymentNotFoundError) {
     return { ok: false, code: 'M5_NOT_FOUND', message: REVERSAL_NOT_FOUND_MESSAGE };
   }
