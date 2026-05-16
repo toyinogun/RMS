@@ -106,3 +106,27 @@ export const paymentRecordSchema = paymentCoreFields
   });
 
 export type PaymentRecordInput = z.infer<typeof paymentRecordSchema>;
+
+const REASON_MAX = 500;
+
+/**
+ * Input schema for the reverse-payment server action.
+ *
+ * - `paymentId`: the UUID of the original payment being reversed.
+ * - `reason`: optional free-text explanation (max 500 chars). Whitespace-only strings are
+ *   normalised to `undefined`. When present, the reversal service will prefix it as
+ *   `[Reversal] ${reason}`; when absent the notes field becomes `[Reversal]`.
+ */
+export const paymentReversalSchema = z.object({
+  paymentId: z.string().uuid({ message: 'Invalid payment id' }),
+  reason: z
+    .string()
+    .trim()
+    .transform((v) => (v === '' ? undefined : v))
+    .optional()
+    .refine((v) => v === undefined || v.length <= REASON_MAX, {
+      message: `Reason must be ${REASON_MAX} characters or fewer`,
+    }),
+});
+
+export type PaymentReversalInput = z.infer<typeof paymentReversalSchema>;
