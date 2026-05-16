@@ -138,8 +138,9 @@ export class PaymentNotFoundError extends Error {
 }
 
 /**
- * The payment has already been reversed (@@unique on reversedById enforces this
- * at DB level; we also check eagerly before the write attempt).
+ * The payment has already been reversed (@@unique on reversedById is the sole
+ * enforcement mechanism — the DB is the source of truth; a P2002 catch surfaces
+ * this error on the constraint violation).
  */
 export class PaymentAlreadyReversedError extends Error {
   static readonly code = 'PAYMENT_ALREADY_REVERSED' as const;
@@ -607,7 +608,7 @@ async function applyReversal(
     reference: string | null;
     reversedById: string | null;
   },
-  originalAllocations: ReadonlyArray<{ installmentId: string; amountKobo: Kobo }>,
+  reversalAllocations: ReadonlyArray<{ installmentId: string; amountKobo: Kobo }>,
   installments: InstallmentForPayment[],
   plan: { id: string; status: PlanStatus },
   reversalNotes: string | undefined,
@@ -642,20 +643,19 @@ async function applyReversal(
   );
 
   const today = new Date();
-  for (const alloc of originalAllocations) {
-    const negatedAmount = (-alloc.amountKobo) as Kobo;
-
+  for (const alloc of reversalAllocations) {
+    // alloc.amountKobo is already negative — produced by reverse() in ReversalPlan
     const allocData = {
       paymentId: reversalPayment.id,
       installmentId: alloc.installmentId,
-      amountKobo: negatedAmount,
+      amountKobo: alloc.amountKobo,
     } satisfies Omit<Prisma.PaymentAllocationUncheckedCreateInput, 'tenantId'>;
     await tx.paymentAllocation.create({
       data: allocData as unknown as Prisma.PaymentAllocationUncheckedCreateInput,
     });
 
     const inst = installmentStateById.get(alloc.installmentId)!;
-    const newPaid = (inst.amountPaidKobo + negatedAmount) as Kobo;
+    const newPaid = (inst.amountPaidKobo + alloc.amountKobo) as Kobo;
 
     // Sanity guard: newPaid < 0 means the data store is corrupt.
     if (newPaid < 0n) {
@@ -738,15 +738,6 @@ export async function reversePayment(
           throw new CannotReverseReversalRowError(input.paymentId);
         }
 
-        // Eagerly check if already reversed (@@unique will also catch race)
-        const existingReversal = await tx.payment.findUnique({
-          where: { reversedById: input.paymentId },
-          select: { id: true },
-        });
-        if (existingReversal !== null) {
-          throw new PaymentAlreadyReversedError(input.paymentId);
-        }
-
         // Fetch the affected installments (only those referenced by original allocations)
         const allocationInstallmentIds = original.allocations.map((a) => a.installmentId);
         const installments = await tx.installment.findMany({
@@ -762,14 +753,16 @@ export async function reversePayment(
           status: i.status,
         }));
 
-        // Compute the ReversalPlan (validates invariants on original data)
+        // Compute the ReversalPlan — throws ReversalInvariantError if data is corrupt.
+        // The plan's allocations are already negated; pass them straight into applyReversal.
         const originalAllocations = original.allocations.map((a) => ({
           installmentId: a.installmentId,
           amountKobo: a.amountKobo as Kobo,
         }));
-
-        // Validate via reverse() — throws ReversalInvariantError if data is corrupt
-        reverse({ amountKobo: original.amountKobo as Kobo, allocations: originalAllocations });
+        const reversalPlan = reverse({
+          amountKobo: original.amountKobo as Kobo,
+          allocations: originalAllocations,
+        });
 
         // Apply the reversal writes
         return await applyReversal(
@@ -783,7 +776,7 @@ export async function reversePayment(
             reference: original.reference,
             reversedById: original.reversedById,
           },
-          originalAllocations,
+          reversalPlan.allocations,
           installmentsForWrite,
           { id: original.plan.id, status: original.plan.status },
           input.notes,
