@@ -68,6 +68,7 @@ export {
   CannotDeactivateLastOwnerError,
   UserAlreadyDeactivatedError,
   UserNotDeactivatedError,
+  UserDeactivateRetryableSerializationError,
 } from './users-service';
 export type {
   UsersAuthAdapter,

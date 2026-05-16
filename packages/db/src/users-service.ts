@@ -5,6 +5,18 @@ import { generateTempPassword } from '@solutio/shared/users';
 import { forTenant } from './tenant-client';
 import { prisma } from './client';
 
+// ─── Retryable Errors ─────────────────────────────────────────────────────────
+
+/** Thrown when a SERIALIZABLE serialization conflict aborts deactivateUser. */
+export class UserDeactivateRetryableSerializationError extends Error {
+  static readonly code = 'USER_DEACTIVATE_RETRYABLE_SERIALIZATION' as const;
+  readonly code = UserDeactivateRetryableSerializationError.code;
+  constructor() {
+    super('Concurrent update aborted user deactivation. Retry suggested.');
+    this.name = 'UserDeactivateRetryableSerializationError';
+  }
+}
+
 // ─── Port ────────────────────────────────────────────────────────────────────
 
 export interface UsersAuthAdapter {
@@ -14,18 +26,6 @@ export interface UsersAuthAdapter {
     name: string;
   }): Promise<{ authUserId: string }>;
 }
-
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-export type UserListRow = {
-  id: string;
-  email: string;
-  name: string;
-  role: 'OWNER' | 'ADMIN' | 'STAFF';
-  deactivatedAt: Date | null;
-  mustChangePassword: boolean;
-  createdAt: Date;
-};
 
 // ─── Errors ──────────────────────────────────────────────────────────────────
 
@@ -80,7 +80,7 @@ export class UserNotDeactivatedError extends Error {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const USER_SELECT = {
+export const USER_SELECT = {
   id: true,
   email: true,
   name: true,
@@ -89,6 +89,8 @@ const USER_SELECT = {
   mustChangePassword: true,
   createdAt: true,
 } as const;
+
+export type UserListRow = Prisma.UserGetPayload<{ select: typeof USER_SELECT }>;
 
 function isEmailConflict(err: unknown): boolean {
   if (err instanceof Error) {
@@ -117,7 +119,7 @@ export async function listUsers(ctx: TenantContext): Promise<UserListRow[]> {
       { deactivatedAt: { sort: 'asc', nulls: 'first' } },
       { createdAt: 'desc' },
     ],
-  }) as Promise<UserListRow[]>;
+  });
 }
 
 export async function createUser(
@@ -135,6 +137,9 @@ export async function createUser(
 
   let authUserId: string;
   try {
+    // Auth row is committed before the domain insert. If the domain insert fails,
+    // the auth row is orphaned. Acceptable for Phase 1a — retry surfaces EmailAlreadyInUseError.
+    // See M6 plan §Risks.
     const result = await deps.auth.signUpEmail({
       email: input.email,
       password: tempPassword,
@@ -165,7 +170,7 @@ export async function createUser(
     });
   });
 
-  return { user: user as UserListRow, tempPassword };
+  return { user, tempPassword };
 }
 
 export async function deactivateUser(
@@ -176,44 +181,56 @@ export async function deactivateUser(
 
   const scoped = forTenant(prisma, ctx.tenantId);
 
-  return scoped.$transaction(async (tx) => {
-    const target = await tx.user.findUnique({
-      where: { id: userId },
-      select: { id: true, role: true, deactivatedAt: true, authUserId: true },
-    });
+  try {
+    return await scoped.$transaction(
+      async (tx) => {
+        const target = await tx.user.findUnique({
+          where: { id: userId },
+          select: { id: true, role: true, deactivatedAt: true, authUserId: true },
+        });
 
-    if (!target) throw new UserNotFoundError(userId);
+        if (!target) throw new UserNotFoundError(userId);
 
-    if (target.id === ctx.user.id) {
-      throw new CannotDeactivateSelfError(userId);
+        if (target.id === ctx.user.id) {
+          throw new CannotDeactivateSelfError(userId);
+        }
+
+        if (target.role === 'OWNER') {
+          const activeOwnerCount = await tx.user.count({
+            where: { role: 'OWNER', deactivatedAt: null },
+          });
+          if (activeOwnerCount <= 1) {
+            throw new CannotDeactivateLastOwnerError(userId);
+          }
+        }
+
+        if (target.deactivatedAt !== null) {
+          throw new UserAlreadyDeactivatedError(userId);
+        }
+
+        const deactivatedAt = new Date();
+
+        await tx.user.update({
+          where: { id: userId },
+          data: { deactivatedAt },
+        });
+
+        await tx.session.deleteMany({
+          where: { userId: target.authUserId },
+        });
+
+        return { deactivatedAt };
+      },
+      { isolationLevel: 'Serializable' },
+    );
+  } catch (err) {
+    // Postgres SQLSTATE 40001 (serialization_failure) surfaces from Prisma as P2034.
+    // Re-wrap so the action layer can decide whether to retry once.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {
+      throw new UserDeactivateRetryableSerializationError();
     }
-
-    if (target.role === 'OWNER') {
-      const activeOwnerCount = await tx.user.count({
-        where: { role: 'OWNER', deactivatedAt: null },
-      });
-      if (activeOwnerCount <= 1) {
-        throw new CannotDeactivateLastOwnerError(userId);
-      }
-    }
-
-    if (target.deactivatedAt !== null) {
-      throw new UserAlreadyDeactivatedError(userId);
-    }
-
-    const deactivatedAt = new Date();
-
-    await tx.user.update({
-      where: { id: userId },
-      data: { deactivatedAt },
-    });
-
-    await tx.session.deleteMany({
-      where: { userId: target.authUserId },
-    });
-
-    return { deactivatedAt };
-  });
+    throw err;
+  }
 }
 
 export async function reactivateUser(
@@ -224,19 +241,21 @@ export async function reactivateUser(
 
   const scoped = forTenant(prisma, ctx.tenantId);
 
-  const target = await scoped.user.findUnique({
-    where: { id: userId },
-    select: { id: true, deactivatedAt: true },
+  return scoped.$transaction(async (tx) => {
+    const target = await tx.user.findUnique({
+      where: { id: userId },
+      select: { id: true, deactivatedAt: true },
+    });
+
+    if (!target) throw new UserNotFoundError(userId);
+    if (target.deactivatedAt === null) throw new UserNotDeactivatedError(userId);
+
+    const user = await tx.user.update({
+      where: { id: userId },
+      data: { deactivatedAt: null },
+      select: USER_SELECT,
+    });
+
+    return { user };
   });
-
-  if (!target) throw new UserNotFoundError(userId);
-  if (target.deactivatedAt === null) throw new UserNotDeactivatedError(userId);
-
-  const user = await scoped.user.update({
-    where: { id: userId },
-    data: { deactivatedAt: null },
-    select: USER_SELECT,
-  });
-
-  return { user: user as UserListRow };
 }
