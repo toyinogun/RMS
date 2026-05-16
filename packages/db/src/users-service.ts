@@ -110,6 +110,19 @@ function isEmailConflict(err: unknown): boolean {
 
 // ─── Service Functions ────────────────────────────────────────────────────────
 
+/**
+ * Returns true if the domain User row linked to `authUserId` has been deactivated.
+ * Used by the login action to reject deactivated users immediately after sign-in.
+ * Returns false if no matching domain user exists (edge case — let the layout gate handle it).
+ */
+export async function isAuthUserDeactivated(authUserId: string): Promise<boolean> {
+  const user = await prisma.user.findFirst({
+    where: { authUserId },
+    select: { deactivatedAt: true },
+  });
+  return user !== null && user.deactivatedAt !== null;
+}
+
 export async function listUsers(ctx: TenantContext): Promise<UserListRow[]> {
   requireRole(ctx, ['OWNER']);
   const scoped = forTenant(prisma, ctx.tenantId);

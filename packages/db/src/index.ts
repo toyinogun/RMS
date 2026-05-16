@@ -61,6 +61,7 @@ export {
   createUser,
   deactivateUser,
   reactivateUser,
+  isAuthUserDeactivated,
   UserNotFoundError,
   EmailAlreadyInUseError,
   CannotCreateOwnerError,

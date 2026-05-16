@@ -4,6 +4,7 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { auth } from '@/lib/auth';
+import { isAuthUserDeactivated } from '@solutio/db';
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -29,5 +30,15 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
   } catch {
     return { error: 'Invalid email or password.' };
   }
+
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (session?.user) {
+    const deactivated = await isAuthUserDeactivated(session.user.id);
+    if (deactivated) {
+      await auth.api.signOut({ headers: await headers() });
+      return { error: 'This account has been deactivated. Contact your account owner.' };
+    }
+  }
+
   redirect('/');
 }
