@@ -483,10 +483,13 @@ test('M5-A: OWNER reverses payment, plan COMPLETED → ACTIVE', async ({ page })
   await dialog.getByLabel(/reason/i).fill('Test reversal — closing payment');
   await dialog.getByRole('button', { name: /^reverse$/i }).click();
 
-  // Toast confirms the action. Allow extra time — the action is a
-  // SERIALIZABLE DB transaction; the closing payment touches all
-  // six installments + the plan row.
-  await expect(page.getByText('Payment reversed.')).toBeVisible({ timeout: 15_000 });
+  // The dialog auto-closes on success (action returns ok:true → useEffect
+  // calls setOpen(false)). This is a more reliable success signal than the
+  // sonner toast, which auto-dismisses after ~4 seconds and may already be
+  // gone by the time CI evaluates the assertion. Allow extra time — the
+  // action is a SERIALIZABLE DB transaction that touches all six installments
+  // + the plan row.
+  await expect(dialog).toBeHidden({ timeout: 15_000 });
 
   // ------------------------------------------------------------------ //
   // Assert post-reversal state (dialog has closed automatically)        //
