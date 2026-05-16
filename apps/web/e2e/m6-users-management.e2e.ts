@@ -17,7 +17,7 @@
  *
  * Console assertion: each test fails if any unfiltered console.error fires.
  */
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 const OWNER_EMAIL = 'owner@atrium.test';
 const OWNER_PASSWORD = 'newStrongPassword!2026';
@@ -30,7 +30,7 @@ const STAFF_SEED_PASSWORD = 'staffPassword!2026';
 
 /** Sign in via the /login page. Caller asserts destination URL. */
 async function signIn(
-  page: import('@playwright/test').Page,
+  page: Page,
   email: string,
   password: string,
 ) {
@@ -42,7 +42,7 @@ async function signIn(
 }
 
 /** Sign out using the nav button (works on wide and narrow viewports). */
-async function signOut(page: import('@playwright/test').Page) {
+async function signOut(page: Page) {
   // The sign-out button exists twice (md: wide / compact), grab the first visible one.
   await page.getByRole('button', { name: /sign out/i }).first().click();
   await expect(page).toHaveURL(/\/login$/);
@@ -50,7 +50,7 @@ async function signOut(page: import('@playwright/test').Page) {
 
 /** Onboard a user that has mustChangePassword set: fill current + new password. */
 async function onboard(
-  page: import('@playwright/test').Page,
+  page: Page,
   currentPassword: string,
   newPassword: string,
 ) {
