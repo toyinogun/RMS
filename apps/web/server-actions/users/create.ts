@@ -9,6 +9,7 @@ import {
   CannotCreateOwnerError,
 } from '@solutio/db';
 import { getTenantContext } from '@/lib/tenant-context';
+import { usersAuthAdapter } from '@/lib/users-auth-adapter';
 import { hasRole, ForbiddenError } from '@solutio/shared/tenant';
 import {
   M6_CREATE_UNAUTHENTICATED_MESSAGE,
@@ -65,11 +66,7 @@ export async function createUserAction(
     };
   }
 
-  // Lazy-import the auth adapter to avoid pulling Better Auth into the test
-  // bundle. Tests mock this module via vi.mock('@/lib/users-auth-adapter').
-  const { usersAuthAdapter } = await import('@/lib/users-auth-adapter');
-
-  let result: { user: { id: string; email: string }; tempPassword: string };
+  let result: Awaited<ReturnType<typeof createUser>>;
   try {
     result = await createUser(ctx, parsed.data, { auth: usersAuthAdapter });
   } catch (err) {
