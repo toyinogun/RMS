@@ -379,10 +379,12 @@ test('M5-A: OWNER reverses payment, plan COMPLETED → ACTIVE', async ({ page })
   await page.getByLabel(/address/i).fill('1 M5 Lane');
   await page.getByLabel(/city/i).fill('Lagos');
   // ₦200,000 total: ₦100,000 deposit (toggle ON → seq 0 PAID, plan ACTIVE)
-  // + 1 × ₦100,000 installment (seq 1). One more ₦100,000 payment closes
+  // + 2 installments at ₦60,000 monthly with a ₦40,000 final row. One more
+  // ₦100,000 payment FIFO-allocates 60k to inst 1 + 40k to inst 2, closing
   // everything → plan COMPLETED. Schedule arithmetic:
   //   outstanding = 200,000 − 100,000 = 100,000
-  //   1 × 100,000 = 100,000  (finalRow = 0, clean schedule) ✓
+  //   1 × 60,000 + finalRow 40,000 = 100,000
+  //   finalRow > 0n ✓ and finalRow ≤ 2 × monthly (120,000) ✓
   await page.getByLabel(/total price/i).fill('200,000');
   await page.getByRole('button', { name: /^save$/i }).click();
   await expect(page).toHaveURL('/properties');
@@ -407,8 +409,8 @@ test('M5-A: OWNER reverses payment, plan COMPLETED → ACTIVE', async ({ page })
 
   await expect(page.getByRole('heading', { name: /payment terms/i })).toBeVisible();
   await page.getByLabel(/down payment today/i).fill('100,000');
-  await page.getByLabel(/monthly amount/i).fill('100,000');
-  await page.getByLabel(/term \(months/i).fill('1');
+  await page.getByLabel(/monthly amount/i).fill('60,000');
+  await page.getByLabel(/term \(months/i).fill('2');
 
   const depositToggle = page.getByLabel(/deposit received today/i);
   await depositToggle.check();
