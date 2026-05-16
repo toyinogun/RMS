@@ -479,11 +479,14 @@ test('M5-A: OWNER reverses payment, plan COMPLETED → ACTIVE', async ({ page })
   // The dialog warns that COMPLETED → ACTIVE.
   await expect(page.getByText(/the plan will reopen/i)).toBeVisible();
 
-  await page.getByLabel(/reason/i).fill('Test reversal — closing payment');
-  await page.getByRole('button', { name: /^reverse$/i }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel(/reason/i).fill('Test reversal — closing payment');
+  await dialog.getByRole('button', { name: /^reverse$/i }).click();
 
-  // Toast confirms the action.
-  await expect(page.getByText('Payment reversed.')).toBeVisible();
+  // Toast confirms the action. Allow extra time — the action is a
+  // SERIALIZABLE DB transaction; the closing payment touches all
+  // six installments + the plan row.
+  await expect(page.getByText('Payment reversed.')).toBeVisible({ timeout: 15_000 });
 
   // ------------------------------------------------------------------ //
   // Assert post-reversal state (dialog has closed automatically)        //
