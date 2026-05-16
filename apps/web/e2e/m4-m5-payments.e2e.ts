@@ -25,10 +25,11 @@
  *
  * M5 section (three tests):
  *   5. OWNER reverses a payment, plan COMPLETED → ACTIVE.
- *      Uses a fresh M5-specific plan (₦200,000 total, ₦100,000 deposit +
- *      1 × ₦100,000 installment). The deposit toggle is ON so the plan
- *      starts ACTIVE. One more ₦100,000 payment closes all installments
- *      → plan COMPLETED. Reverse that payment → plan ACTIVE.
+ *      Uses a fresh M5-specific plan (₦210,000 total, ₦100,000 deposit +
+ *      6-month term at ₦20,000 monthly with a ₦10,000 final row). The
+ *      deposit toggle is ON so the plan starts ACTIVE. One ₦110,000 payment
+ *      FIFO-allocates 5×₦20k + ₦10k, closing every installment → plan
+ *      COMPLETED. Reverse that payment → plan ACTIVE.
  *   6. STAFF cannot see the Reverse button.
  *      Same plan detail, logged in as staff@atrium.test (seeded with role STAFF).
  *   7. Cannot reverse twice.
@@ -378,14 +379,15 @@ test('M5-A: OWNER reverses payment, plan COMPLETED → ACTIVE', async ({ page })
   await page.getByLabel(/^title/i).fill('M5 property');
   await page.getByLabel(/address/i).fill('1 M5 Lane');
   await page.getByLabel(/city/i).fill('Lagos');
-  // ₦200,000 total: ₦100,000 deposit (toggle ON → seq 0 PAID, plan ACTIVE)
-  // + 2 installments at ₦60,000 monthly with a ₦40,000 final row. One more
-  // ₦100,000 payment FIFO-allocates 60k to inst 1 + 40k to inst 2, closing
-  // everything → plan COMPLETED. Schedule arithmetic:
-  //   outstanding = 200,000 − 100,000 = 100,000
-  //   1 × 60,000 + finalRow 40,000 = 100,000
-  //   finalRow > 0n ✓ and finalRow ≤ 2 × monthly (120,000) ✓
-  await page.getByLabel(/total price/i).fill('200,000');
+  // ₦210,000 total: ₦100,000 deposit (toggle ON → seq 0 PAID, plan ACTIVE)
+  // + 6-month term with monthly ₦20,000 and a ₦10,000 final row. One ₦110,000
+  // closing payment FIFO-allocates 5×₦20k + ₦10k, closing every installment
+  // → plan COMPLETED. Schedule arithmetic:
+  //   outstanding = 210,000 − 100,000 = 110,000
+  //   5 × 20,000 + finalRow 10,000 = 110,000
+  //   term ≥ 6 (wizard guard) ✓
+  //   finalRow > 0n ✓ and finalRow ≤ 2 × monthly (40,000) ✓
+  await page.getByLabel(/total price/i).fill('210,000');
   await page.getByRole('button', { name: /^save$/i }).click();
   await expect(page).toHaveURL('/properties');
   await expect(page.getByRole('link', { name: 'M5-01' })).toBeVisible();
@@ -409,8 +411,8 @@ test('M5-A: OWNER reverses payment, plan COMPLETED → ACTIVE', async ({ page })
 
   await expect(page.getByRole('heading', { name: /payment terms/i })).toBeVisible();
   await page.getByLabel(/down payment today/i).fill('100,000');
-  await page.getByLabel(/monthly amount/i).fill('60,000');
-  await page.getByLabel(/term \(months/i).fill('2');
+  await page.getByLabel(/monthly amount/i).fill('20,000');
+  await page.getByLabel(/term \(months/i).fill('6');
 
   const depositToggle = page.getByLabel(/deposit received today/i);
   await depositToggle.check();
@@ -439,12 +441,12 @@ test('M5-A: OWNER reverses payment, plan COMPLETED → ACTIVE', async ({ page })
   await expect(page.getByText('M5 Customer · M5-01')).toBeVisible();
 
   // ------------------------------------------------------------------ //
-  // Record the single closing payment: ₦100,000 → plan COMPLETED       //
+  // Record the single closing payment: ₦110,000 → plan COMPLETED       //
   // ------------------------------------------------------------------ //
   await page.getByRole('link', { name: /record payment/i }).click();
   await expect(page).toHaveURL(new RegExp(`/plans/${m5PlanId}/payments/new$`));
 
-  await page.locator('#amountNgn').fill('100,000');
+  await page.locator('#amountNgn').fill('110,000');
   await page.getByRole('button', { name: /^record payment$/i }).click();
 
   // Plan transitions to COMPLETED.
@@ -460,9 +462,9 @@ test('M5-A: OWNER reverses payment, plan COMPLETED → ACTIVE', async ({ page })
     .getByRole('tabpanel')
     .filter({ hasText: 'Paid date' })
     .locator('tbody tr');
-  // Most-recent first: row 0 = ₦100,000 closing payment, row 1 = ₦100,000 deposit.
+  // Most-recent first: row 0 = ₦110,000 closing payment, row 1 = ₦100,000 deposit.
   await expect(rowsBeforeReversal).toHaveCount(2);
-  await expect(rowsBeforeReversal.first()).toContainText('₦100,000');
+  await expect(rowsBeforeReversal.first()).toContainText('₦110,000');
 
   // ------------------------------------------------------------------ //
   // Reverse the closing payment (row 0)                                 //
@@ -500,11 +502,11 @@ test('M5-A: OWNER reverses payment, plan COMPLETED → ACTIVE', async ({ page })
 
   // Row 0 (most-recent): reversal row — "Reversal" badge, negative amount.
   await expect(rowsAfterReversal.nth(0)).toContainText('Reversal');
-  await expect(rowsAfterReversal.nth(0)).toContainText('-₦100,000');
+  await expect(rowsAfterReversal.nth(0)).toContainText('-₦110,000');
 
   // Row 1: original closing payment — "Reversed" badge.
   await expect(rowsAfterReversal.nth(1)).toContainText('Reversed');
-  await expect(rowsAfterReversal.nth(1)).toContainText('₦100,000');
+  await expect(rowsAfterReversal.nth(1)).toContainText('₦110,000');
 
   // ------------------------------------------------------------------ //
   // Reload and re-assert (confirms RSC re-render correctness)           //
@@ -518,7 +520,7 @@ test('M5-A: OWNER reverses payment, plan COMPLETED → ACTIVE', async ({ page })
     .locator('tbody tr');
   await expect(rowsAfterReload).toHaveCount(3);
   await expect(rowsAfterReload.nth(0)).toContainText('Reversal');
-  await expect(rowsAfterReload.nth(0)).toContainText('-₦100,000');
+  await expect(rowsAfterReload.nth(0)).toContainText('-₦110,000');
   await expect(rowsAfterReload.nth(1)).toContainText('Reversed');
   await expect(page.getByText('ACTIVE', { exact: true })).toBeVisible();
 
