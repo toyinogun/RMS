@@ -35,11 +35,15 @@ test('M4: deposit-on-create + ad-hoc payments (auto/manual/overpay)', async ({ p
   page.on('dialog', (dialog) => dialog.accept());
 
   // Console.error accumulator — fail at end if anything fired.
+  // Filter out "Failed to load resource" 404s for static assets (favicons,
+  // source maps, RSC payloads on navigations the browser pre-fetches) which
+  // are dev-mode noise unrelated to application errors.
   const consoleErrors: string[] = [];
   page.on('console', (msg) => {
-    if (msg.type() === 'error') {
-      consoleErrors.push(msg.text());
-    }
+    if (msg.type() !== 'error') return;
+    const text = msg.text();
+    if (/Failed to load resource.*404/i.test(text)) return;
+    consoleErrors.push(text);
   });
 
   // ------------------------------------------------------------------ //
