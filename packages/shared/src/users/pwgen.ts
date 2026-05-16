@@ -37,11 +37,34 @@ export function generateTempPassword(): string {
 }
 
 function generateCandidate(): string {
+  // Reject bytes >= LIMIT to eliminate modulo bias.
+  // With a 60-char alphabet, 256 % 60 = 16, causing positions 0–15 to be
+  // selected 25% more often than 16–59 if we naively use modulo.
+  // LIMIT = 240 = largest multiple of 60 not exceeding 256.
+  const LIMIT = 256 - (256 % ALL_CHARS.length);
+
   const bytes = randomBytes(16);
   let result = '';
+  let byteIndex = 0;
 
-  for (let i = 0; i < 16; i++) {
-    const byte = bytes[i] as number;
+  while (result.length < 16) {
+    if (byteIndex >= bytes.length) {
+      // Refill buffer if exhausted
+      const newBytes = randomBytes(16);
+      for (let i = 0; i < newBytes.length; i++) {
+        bytes[i] = newBytes[i] as number;
+      }
+      byteIndex = 0;
+    }
+
+    const byte = bytes[byteIndex] as number;
+    byteIndex++;
+
+    // Skip bytes >= LIMIT to avoid bias
+    if (byte >= LIMIT) {
+      continue;
+    }
+
     const index = byte % ALL_CHARS.length;
     result += ALL_CHARS[index];
   }
