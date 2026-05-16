@@ -3,6 +3,7 @@ import { startPostgres, type TestPostgres } from './_helpers/postgres.js';
 import {
   recordPayment,
   listPaymentsForPlan,
+  reversePayment,
   PlanNotPayableError,
   PaymentBeforePlanStartError,
   PaymentOverpayError,
@@ -11,7 +12,11 @@ import {
   AllocationDuplicateInstallmentError,
   AllocationExceedsOutstandingError,
   PaymentRetryableSerializationError,
+  PaymentNotFoundError,
+  PaymentAlreadyReversedError,
+  CannotReverseReversalRowError,
 } from '../src/payments-service.js';
+import { ForbiddenError } from '@solutio/shared/tenant';
 import { createPlan, getPlan } from '../src/plans-service.js';
 import { createProperty } from '../src/properties-service.js';
 import { createCustomer } from '../src/customers-service.js';
@@ -624,5 +629,334 @@ describe('recordPayment — property race (SERIALIZABLE)', () => {
     expect(statuses).toEqual(['ACTIVE', 'DRAFT']);
     const prop = await pg.prisma.property.findUnique({ where: { id: property.id } });
     expect(prop!.status).toBe('SOLD');
+  });
+});
+
+// ─── M5: reversePayment ───────────────────────────────────────────────────────
+
+describe('reversePayment', () => {
+  // Helper: seed a plan and activate it with a deposit payment.
+  const seedActivePlan = async (ctx: TenantContext) => {
+    const property = await seedAvailableProperty(ctx.tenantId);
+    const customer = await seedCustomer(ctx.tenantId);
+    const planId = await seedDraftPlan(ctx, property.id, customer.id);
+    const { paymentId: depositPaymentId } = await recordPayment(ctx, {
+      planId,
+      amountKobo: 2_400_000_00n as Kobo,
+      paidAt: onStartDay(),
+      method: 'TRANSFER',
+    });
+    const plan = await getPlan(ctx, planId);
+    return { planId, property, plan: plan!, depositPaymentId };
+  };
+
+  // 1. Happy path, single allocation
+  test('reverses a single-allocation payment: installment reverts PAID → PENDING', async () => {
+    const ctx = ctxFor(TENANT_A);
+    const { planId, depositPaymentId } = await seedActivePlan(ctx);
+
+    const result = await reversePayment(ctx, {
+      paymentId: depositPaymentId,
+      notes: 'Test reversal',
+    });
+    expect(result.reversalPaymentId).toBeDefined();
+    expect(typeof result.planStatus).toBe('string');
+
+    // Reversal payment row
+    const reversalRow = await pg.prisma.payment.findUnique({
+      where: { id: result.reversalPaymentId },
+      include: { allocations: true },
+    });
+    expect(reversalRow).not.toBeNull();
+    expect(reversalRow!.amountKobo).toBe(-2_400_000_00n);
+    expect(reversalRow!.reversedById).toBe(depositPaymentId);
+    expect(reversalRow!.notes).toBe('[Reversal] Test reversal');
+
+    // Allocation is negative
+    expect(reversalRow!.allocations).toHaveLength(1);
+    expect(reversalRow!.allocations[0]!.amountKobo).toBe(-2_400_000_00n);
+
+    // Installment reverted
+    const plan = await getPlan(ctx, planId);
+    expect(plan!.installments[0]!.status).toBe('PENDING');
+    expect(plan!.installments[0]!.amountPaidKobo).toBe(0n);
+
+    // listPaymentsForPlan: both rows mutually linked
+    const rows = await listPaymentsForPlan(ctx, planId);
+    expect(rows).toHaveLength(2);
+    const originalRow = rows.find((r) => r.id === depositPaymentId)!;
+    const reversalListRow = rows.find((r) => r.id === result.reversalPaymentId)!;
+    expect(originalRow.reversedByPaymentId).toBe(result.reversalPaymentId);
+    expect(reversalListRow.reversedById).toBe(depositPaymentId);
+  });
+
+  // 2. Happy path, multi-allocation
+  test('reverses multi-allocation payment: both installments revert exactly', async () => {
+    const ctx = ctxFor(TENANT_A);
+    const { planId } = await seedActivePlan(ctx);
+
+    // Second payment: partially pays inst1 (monthly#1) and inst2 (monthly#2)
+    const plan = await getPlan(ctx, planId);
+    const inst1 = plan!.installments.find((i) => i.sequenceNo === 1)!;
+    const inst2 = plan!.installments.find((i) => i.sequenceNo === 2)!;
+
+    const { paymentId: multiPaymentId } = await recordPayment(ctx, {
+      planId,
+      amountKobo: 1_000_000_00n as Kobo,
+      paidAt: new Date('2026-06-15T10:00:00Z'),
+      method: 'CASH',
+      allocations: [
+        { installmentId: inst1.id, amountKobo: 800_000_00n as Kobo },
+        { installmentId: inst2.id, amountKobo: 200_000_00n as Kobo },
+      ],
+    } as PaymentRecordInput);
+
+    const result = await reversePayment(ctx, { paymentId: multiPaymentId });
+
+    const reversalRow = await pg.prisma.payment.findUnique({
+      where: { id: result.reversalPaymentId },
+      include: { allocations: { orderBy: { createdAt: 'asc' } } },
+    });
+    expect(reversalRow!.amountKobo).toBe(-1_000_000_00n);
+    expect(reversalRow!.allocations).toHaveLength(2);
+
+    const allocAmounts = reversalRow!.allocations.map((a) => a.amountKobo).sort();
+    expect(allocAmounts).toEqual([-800_000_00n, -200_000_00n].sort());
+
+    // Both installments should be back to their state before multi-payment
+    const planAfter = await getPlan(ctx, planId);
+    const inst1After = planAfter!.installments.find((i) => i.sequenceNo === 1)!;
+    const inst2After = planAfter!.installments.find((i) => i.sequenceNo === 2)!;
+    expect(inst1After.amountPaidKobo).toBe(0n);
+    expect(inst2After.amountPaidKobo).toBe(0n);
+  });
+
+  // 3. Plan COMPLETED → ACTIVE on reversal
+  test('reversal of closing payment reverts plan COMPLETED → ACTIVE', async () => {
+    const ctx = ctxFor(TENANT_A);
+    const property = await seedAvailableProperty(ctx.tenantId);
+    const customer = await seedCustomer(ctx.tenantId);
+    const planId = await seedDraftPlan(ctx, property.id, customer.id);
+
+    // Pay full plan in one shot
+    const { paymentId: fullPaymentId, planStatus } = await recordPayment(ctx, {
+      planId,
+      amountKobo: 12_000_000_00n as Kobo,
+      paidAt: onStartDay(),
+      method: 'TRANSFER',
+    });
+    expect(planStatus).toBe('COMPLETED');
+
+    const result = await reversePayment(ctx, { paymentId: fullPaymentId });
+    expect(result.planStatus).toBe('ACTIVE');
+
+    const planAfter = await getPlan(ctx, planId);
+    expect(planAfter!.status).toBe('ACTIVE');
+  });
+
+  // 4. Already-reversed (race): second reverse attempt → PaymentAlreadyReversedError
+  test('double-reverse: second attempt throws PaymentAlreadyReversedError', async () => {
+    const ctx = ctxFor(TENANT_A);
+    const { depositPaymentId } = await seedActivePlan(ctx);
+
+    await reversePayment(ctx, { paymentId: depositPaymentId });
+
+    await expect(
+      reversePayment(ctx, { paymentId: depositPaymentId }),
+    ).rejects.toBeInstanceOf(PaymentAlreadyReversedError);
+
+    // Only one reversal row exists
+    const count = await pg.prisma.payment.count({
+      where: { reversedById: depositPaymentId },
+    });
+    expect(count).toBe(1);
+  });
+
+  // 5. Reverse of a reversal → CannotReverseReversalRowError
+  test('reversing a reversal row throws CannotReverseReversalRowError', async () => {
+    const ctx = ctxFor(TENANT_A);
+    const { depositPaymentId } = await seedActivePlan(ctx);
+
+    const { reversalPaymentId } = await reversePayment(ctx, { paymentId: depositPaymentId });
+
+    await expect(
+      reversePayment(ctx, { paymentId: reversalPaymentId }),
+    ).rejects.toBeInstanceOf(CannotReverseReversalRowError);
+  });
+
+  // 6. Cross-tenant isolation: tenant B cannot reverse tenant A's payment
+  test('cross-tenant: PaymentNotFoundError when paymentId belongs to different tenant', async () => {
+    const ctxA = ctxFor(TENANT_A);
+    const ctxB = ctxFor(TENANT_B);
+
+    const { depositPaymentId } = await seedActivePlan(ctxA);
+
+    await expect(
+      reversePayment(ctxB, { paymentId: depositPaymentId }),
+    ).rejects.toBeInstanceOf(PaymentNotFoundError);
+  });
+
+  // 7. STAFF role rejected
+  test('STAFF role: ForbiddenError, no DB writes', async () => {
+    const ctxA = ctxFor(TENANT_A);
+    const { depositPaymentId, planId } = await seedActivePlan(ctxA);
+
+    const staffCtx: TenantContext = {
+      tenantId: TENANT_A,
+      user: {
+        id: USER_ID,
+        authUserId: AUTH_USER_ID,
+        role: 'STAFF',
+        email: 'staff@payments-test',
+        mustChangePassword: false,
+      },
+    };
+
+    await expect(
+      reversePayment(staffCtx, { paymentId: depositPaymentId }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+
+    // Ensure no reversal row was written
+    const count = await pg.prisma.payment.count({ where: { reversedById: depositPaymentId } });
+    expect(count).toBe(0);
+    void planId;
+  });
+
+  // 8. OVERDUE walk-back: reversed status is OVERDUE
+  test('OVERDUE walk-back: reversal drives installment status to OVERDUE when past dueDate', async () => {
+    const ctx = ctxFor(TENANT_A);
+    // Create a plan with a past start date so installment is overdue
+    const pastStart = new Date('2025-01-01T00:00:00Z');
+    const property = await seedAvailableProperty(ctx.tenantId);
+    const customer = await seedCustomer(ctx.tenantId);
+    const planId = await seedDraftPlan(ctx, property.id, customer.id, {
+      startDate: pastStart,
+    });
+
+    // Pay deposit (installment #0, past due → would be OVERDUE if unpaid)
+    const plan = await getPlan(ctx, planId);
+    const depositInst = plan!.installments.find((i) => i.sequenceNo === 0)!;
+
+    const { paymentId } = await recordPayment(ctx, {
+      planId,
+      amountKobo: depositInst.amountDueKobo as Kobo,
+      paidAt: pastStart,
+      method: 'TRANSFER',
+    });
+
+    // Verify it's now PAID
+    const planAfterPay = await getPlan(ctx, planId);
+    const instAfterPay = planAfterPay!.installments.find((i) => i.sequenceNo === 0)!;
+    expect(instAfterPay.status).toBe('PAID');
+
+    // Reverse: since dueDate is in the past, reverting paid→unpaid should yield OVERDUE
+    await reversePayment(ctx, { paymentId });
+
+    const planAfterReverse = await getPlan(ctx, planId);
+    const instAfterReverse = planAfterReverse!.installments.find((i) => i.sequenceNo === 0)!;
+    expect(instAfterReverse.amountPaidKobo).toBe(0n);
+    expect(instAfterReverse.status).toBe('OVERDUE');
+  });
+
+  // 9. PARTIAL walk-back: reverse second payment; inst2 PARTIAL→PENDING; inst1 untouched
+  test('PARTIAL walk-back: reversing second payment leaves first installment intact', async () => {
+    const ctx = ctxFor(TENANT_A);
+    const { planId } = await seedActivePlan(ctx);
+
+    // First payment fully pays installment #1 (monthly)
+    const plan = await getPlan(ctx, planId);
+    const inst1 = plan!.installments.find((i) => i.sequenceNo === 1)!;
+    const inst2 = plan!.installments.find((i) => i.sequenceNo === 2)!;
+
+    await recordPayment(ctx, {
+      planId,
+      amountKobo: 800_000_00n as Kobo,
+      paidAt: new Date('2026-06-15T10:00:00Z'),
+      method: 'TRANSFER',
+      allocations: [{ installmentId: inst1.id, amountKobo: 800_000_00n as Kobo }],
+    } as PaymentRecordInput);
+
+    // Second payment partially pays installment #2
+    const { paymentId: secondPaymentId } = await recordPayment(ctx, {
+      planId,
+      amountKobo: 300_000_00n as Kobo,
+      paidAt: new Date('2026-06-20T10:00:00Z'),
+      method: 'CASH',
+      allocations: [{ installmentId: inst2.id, amountKobo: 300_000_00n as Kobo }],
+    } as PaymentRecordInput);
+
+    const planBeforeReverse = await getPlan(ctx, planId);
+    expect(planBeforeReverse!.installments.find((i) => i.sequenceNo === 1)!.status).toBe('PAID');
+    expect(planBeforeReverse!.installments.find((i) => i.sequenceNo === 2)!.status).toBe('PARTIAL');
+
+    // Reverse only the second payment
+    await reversePayment(ctx, { paymentId: secondPaymentId });
+
+    const planAfter = await getPlan(ctx, planId);
+    expect(planAfter!.installments.find((i) => i.sequenceNo === 1)!.status).toBe('PAID');   // untouched
+    expect(planAfter!.installments.find((i) => i.sequenceNo === 2)!.status).toBe('PENDING'); // reverted
+    expect(planAfter!.installments.find((i) => i.sequenceNo === 2)!.amountPaidKobo).toBe(0n);
+  });
+
+  // 10. Plan stays ACTIVE when reversing a non-closing payment
+  test('plan stays ACTIVE when reversing a payment that did not close the plan', async () => {
+    const ctx = ctxFor(TENANT_A);
+    const { planId, depositPaymentId } = await seedActivePlan(ctx);
+
+    // Record a second small payment
+    const plan = await getPlan(ctx, planId);
+    const inst1 = plan!.installments.find((i) => i.sequenceNo === 1)!;
+    const { paymentId: smallPaymentId } = await recordPayment(ctx, {
+      planId,
+      amountKobo: 800_000_00n as Kobo,
+      paidAt: new Date('2026-06-15T10:00:00Z'),
+      method: 'TRANSFER',
+      allocations: [{ installmentId: inst1.id, amountKobo: 800_000_00n as Kobo }],
+    } as PaymentRecordInput);
+
+    const result = await reversePayment(ctx, { paymentId: smallPaymentId });
+    expect(result.planStatus).toBe('ACTIVE');
+
+    const planAfter = await getPlan(ctx, planId);
+    expect(planAfter!.status).toBe('ACTIVE');
+
+    void depositPaymentId;
+  });
+
+  // 11. Property stays SOLD when reversing a payment
+  test('property stays SOLD when reversing a payment; property status is immutable after activation', async () => {
+    const ctx = ctxFor(TENANT_A);
+    const { planId, property } = await seedActivePlan(ctx);
+
+    // Verify property is SOLD after activation
+    const propBefore = await pg.prisma.property.findUnique({ where: { id: property.id } });
+    expect(propBefore!.status).toBe('SOLD');
+
+    const plan = await getPlan(ctx, planId);
+    const inst1 = plan!.installments.find((i) => i.sequenceNo === 1)!;
+    const { paymentId: smallPaymentId } = await recordPayment(ctx, {
+      planId,
+      amountKobo: 800_000_00n as Kobo,
+      paidAt: new Date('2026-06-15T10:00:00Z'),
+      method: 'TRANSFER',
+      allocations: [{ installmentId: inst1.id, amountKobo: 800_000_00n as Kobo }],
+    } as PaymentRecordInput);
+
+    await reversePayment(ctx, { paymentId: smallPaymentId });
+
+    // Property still SOLD — reversal does not touch property status
+    const propAfter = await pg.prisma.property.findUnique({ where: { id: property.id } });
+    expect(propAfter!.status).toBe('SOLD');
+    void planId;
+  });
+
+  // Bonus: no notes → '[Reversal]' prefix only
+  test('reversal with no notes produces [Reversal] prefix only', async () => {
+    const ctx = ctxFor(TENANT_A);
+    const { depositPaymentId } = await seedActivePlan(ctx);
+
+    const { reversalPaymentId } = await reversePayment(ctx, { paymentId: depositPaymentId });
+    const row = await pg.prisma.payment.findUnique({ where: { id: reversalPaymentId } });
+    expect(row!.notes).toBe('[Reversal]');
   });
 });
