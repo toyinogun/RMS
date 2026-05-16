@@ -29,8 +29,7 @@ vi.mock('@solutio/db/payments-service', () => ({
   },
 }));
 vi.mock('@solutio/shared/tenant', async () => {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-imports
-  const actual = await vi.importActual<import('@solutio/shared/tenant')>(
+  const actual = await vi.importActual<typeof import('@solutio/shared/tenant')>(
     '@solutio/shared/tenant',
   );
   return {
