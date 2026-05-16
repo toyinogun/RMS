@@ -1,4 +1,5 @@
 import type { Kobo } from '../money/index';
+import type { Allocation } from './types';
 
 /**
  * The output of `reverse()` — a negated mirror of the original payment's
@@ -8,11 +9,8 @@ import type { Kobo } from '../money/index';
 export type ReversalPlan = {
   /** Negative — exact negation of the original payment's amountKobo. */
   amountKobo: Kobo;
-  allocations: ReadonlyArray<{
-    installmentId: string;
-    /** Negative — exact negation of the corresponding original allocation. */
-    amountKobo: Kobo;
-  }>;
+  /** Negative — exact negation of each corresponding original allocation. */
+  allocations: ReadonlyArray<Allocation>;
 };
 
 /**
@@ -35,7 +33,7 @@ export class ReversalInvariantError extends Error {
  */
 export function reverse(original: {
   amountKobo: Kobo;
-  allocations: ReadonlyArray<{ installmentId: string; amountKobo: Kobo }>;
+  allocations: ReadonlyArray<Allocation>;
 }): ReversalPlan {
   if (original.amountKobo <= 0n) {
     throw new ReversalInvariantError('amountKobo must be positive');

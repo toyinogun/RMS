@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { koboFromNaira } from '../../money/index.js';
 import type { Kobo } from '../../money/index.js';
-import { reverse } from '../reverse.js';
+import { reverse, ReversalInvariantError } from '../reverse.js';
 
 describe('reverse', () => {
   test('single-allocation reversal — negates amount and the one allocation', () => {
@@ -44,7 +44,7 @@ describe('reverse', () => {
     expect(() =>
       reverse({
         amountKobo: 0n as Kobo,
-        allocations: [{ installmentId: 'inst-1', amountKobo: 0n as Kobo }],
+        allocations: [{ installmentId: 'inst-1', amountKobo: 100n as Kobo }],
       }),
     ).toThrow(/amountKobo must be positive/);
   });
@@ -56,6 +56,15 @@ describe('reverse', () => {
         allocations: [{ installmentId: 'inst-1', amountKobo: 100n as Kobo }],
       }),
     ).toThrow(/amountKobo must be positive/);
+  });
+
+  test('thrown error is an instance of ReversalInvariantError', () => {
+    expect(() =>
+      reverse({
+        amountKobo: 0n as Kobo,
+        allocations: [{ installmentId: 'inst-1', amountKobo: 100n as Kobo }],
+      }),
+    ).toThrow(ReversalInvariantError);
   });
 
   test('throws on empty allocations', () => {
