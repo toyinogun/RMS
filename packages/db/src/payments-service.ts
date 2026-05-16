@@ -16,6 +16,7 @@ import { prisma } from './client';
 import { PlanNotFoundError, PropertyNotAvailableError } from './plan-errors';
 
 export { PlanNotFoundError, PropertyNotAvailableError };
+export type { PlanStatus };
 
 /**
  * The plan was found but it's not in a state that accepts new payments.

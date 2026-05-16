@@ -1,10 +1,6 @@
 import { formatKobo, type Kobo } from '@solutio/shared/money';
-import type { PaymentListRow, ReversePaymentResult } from '@solutio/db/payments-service';
+import type { PaymentListRow, PlanStatus } from '@solutio/db/payments-service';
 import type { UserRole } from '@solutio/shared/tenant';
-
-// Derive PlanStatus from the service layer rather than importing @prisma/client
-// directly — apps/web only depends on @solutio/db submodule paths, not Prisma types.
-type PlanStatus = ReversePaymentResult['planStatus'];
 import {
   Table,
   TableBody,

@@ -1,12 +1,9 @@
 import { describe, expect, test, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
-import type { PaymentListRow, ReversePaymentResult } from '@solutio/db/payments-service';
+import type { PaymentListRow, PlanStatus } from '@solutio/db/payments-service';
 import type { Kobo } from '@solutio/shared/money';
 import type { UserRole } from '@solutio/shared/tenant';
 import { PaymentsList } from '../payments-list';
-
-// Derive PlanStatus from the service layer — same pattern as the component.
-type PlanStatus = ReversePaymentResult['planStatus'];
 
 // Mock the client-side ReversePaymentDialog so the server component test
 // doesn't need to wire up all client-only React dependencies.
