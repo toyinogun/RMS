@@ -119,14 +119,7 @@ const REASON_MAX = 500;
  */
 export const paymentReversalSchema = z.object({
   paymentId: z.string().uuid({ message: 'Invalid payment id' }),
-  reason: z
-    .string()
-    .trim()
-    .transform((v) => (v === '' ? undefined : v))
-    .optional()
-    .refine((v) => v === undefined || v.length <= REASON_MAX, {
-      message: `Reason must be ${REASON_MAX} characters or fewer`,
-    }),
+  reason: optionalTrimmed('Reason', REASON_MAX),
 });
 
 export type PaymentReversalInput = z.infer<typeof paymentReversalSchema>;

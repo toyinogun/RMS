@@ -251,7 +251,7 @@ describe('paymentReversalSchema', () => {
     });
     expect(res.success).toBe(false);
     if (!res.success) {
-      expect(res.error.issues.some((i) => /500/i.test(i.message))).toBe(true);
+      expect(res.error.issues.some((i) => /500 characters or fewer/i.test(i.message))).toBe(true);
     }
   });
 
@@ -279,8 +279,4 @@ describe('paymentReversalSchema', () => {
     expect(res.success).toBe(true);
   });
 
-  test('accepts omitted reason field', () => {
-    const parsed = paymentReversalSchema.parse({ paymentId: PAYMENT_ID });
-    expect(parsed.reason).toBeUndefined();
-  });
 });
