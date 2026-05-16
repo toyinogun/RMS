@@ -56,3 +56,20 @@ export {
   PropertyNotAvailableError,
   PlanCreateRetryableSerializationError,
 } from './plans-service';
+export {
+  listUsers,
+  createUser,
+  deactivateUser,
+  reactivateUser,
+  UserNotFoundError,
+  EmailAlreadyInUseError,
+  CannotCreateOwnerError,
+  CannotDeactivateSelfError,
+  CannotDeactivateLastOwnerError,
+  UserAlreadyDeactivatedError,
+  UserNotDeactivatedError,
+} from './users-service';
+export type {
+  UsersAuthAdapter,
+  UserListRow,
+} from './users-service';
