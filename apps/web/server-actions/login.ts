@@ -22,8 +22,9 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
     return { error: 'Please enter a valid email and password.' };
   }
 
+  let signInResult: Awaited<ReturnType<typeof auth.api.signInEmail>>;
   try {
-    await auth.api.signInEmail({
+    signInResult = await auth.api.signInEmail({
       body: parsed.data,
       headers: await headers(),
     });
@@ -31,9 +32,11 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
     return { error: 'Invalid email or password.' };
   }
 
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (session?.user) {
-    const deactivated = await isAuthUserDeactivated(session.user.id);
+  // Use signInEmail's return value directly — the freshly-minted session
+  // cookie is on the outgoing response, so a same-action `getSession()` call
+  // would still read the OLD request cookies and return null.
+  if (signInResult?.user) {
+    const deactivated = await isAuthUserDeactivated(signInResult.user.id);
     if (deactivated) {
       await auth.api.signOut({ headers: await headers() });
       return { error: 'This account has been deactivated. Contact your account owner.' };

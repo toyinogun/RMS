@@ -27,7 +27,6 @@ import { loginAction } from '../login';
 
 const signInEmailMock = vi.mocked(auth.api.signInEmail);
 const signOutMock = vi.mocked(auth.api.signOut);
-const getSessionMock = vi.mocked(auth.api.getSession);
 const redirectMock = vi.mocked(redirect);
 const isAuthUserDeactivatedMock = vi.mocked(isAuthUserDeactivated);
 
@@ -42,22 +41,20 @@ function mkFormData(overrides: Record<string, string> = {}): FormData {
   return f;
 }
 
-const activeSession = { user: { id: 'auth-user-id-123' } };
-
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
+const signInResultActive = { user: { id: 'auth-user-id-123' } };
+
 describe('loginAction', () => {
   test('happy path — active user → redirect to /', async () => {
-    signInEmailMock.mockResolvedValue(undefined as never);
-    getSessionMock.mockResolvedValue(activeSession as never);
+    signInEmailMock.mockResolvedValue(signInResultActive as never);
     isAuthUserDeactivatedMock.mockResolvedValue(false);
 
     await loginAction({}, mkFormData());
 
     expect(signInEmailMock).toHaveBeenCalledTimes(1);
-    expect(getSessionMock).toHaveBeenCalledTimes(1);
     expect(isAuthUserDeactivatedMock).toHaveBeenCalledWith('auth-user-id-123');
     expect(signOutMock).not.toHaveBeenCalled();
     expect(redirectMock).toHaveBeenCalledWith('/');
@@ -69,22 +66,19 @@ describe('loginAction', () => {
     const result = await loginAction({}, mkFormData());
 
     expect(result).toEqual({ error: 'Invalid email or password.' });
-    expect(getSessionMock).not.toHaveBeenCalled();
     expect(isAuthUserDeactivatedMock).not.toHaveBeenCalled();
     expect(signOutMock).not.toHaveBeenCalled();
     expect(redirectMock).not.toHaveBeenCalled();
   });
 
   test('deactivated user — signOut called, error returned, no redirect', async () => {
-    signInEmailMock.mockResolvedValue(undefined as never);
-    getSessionMock.mockResolvedValue(activeSession as never);
+    signInEmailMock.mockResolvedValue(signInResultActive as never);
     isAuthUserDeactivatedMock.mockResolvedValue(true);
     signOutMock.mockResolvedValue(undefined as never);
 
     const result = await loginAction({}, mkFormData());
 
     expect(signInEmailMock).toHaveBeenCalledTimes(1);
-    expect(getSessionMock).toHaveBeenCalledTimes(1);
     expect(isAuthUserDeactivatedMock).toHaveBeenCalledWith('auth-user-id-123');
     expect(signOutMock).toHaveBeenCalledTimes(1);
     expect(result).toEqual({
@@ -98,7 +92,6 @@ describe('loginAction', () => {
 
     expect(result).toEqual({ error: 'Please enter a valid email and password.' });
     expect(signInEmailMock).not.toHaveBeenCalled();
-    expect(getSessionMock).not.toHaveBeenCalled();
     expect(isAuthUserDeactivatedMock).not.toHaveBeenCalled();
     expect(redirectMock).not.toHaveBeenCalled();
   });
@@ -108,14 +101,12 @@ describe('loginAction', () => {
 
     expect(result).toEqual({ error: 'Please enter a valid email and password.' });
     expect(signInEmailMock).not.toHaveBeenCalled();
-    expect(getSessionMock).not.toHaveBeenCalled();
     expect(isAuthUserDeactivatedMock).not.toHaveBeenCalled();
     expect(redirectMock).not.toHaveBeenCalled();
   });
 
-  test('getSession returns null (Better Auth quirk) — falls through to redirect', async () => {
-    signInEmailMock.mockResolvedValue(undefined as never);
-    getSessionMock.mockResolvedValue(null as never);
+  test('signInEmail returns shape without user (Better Auth quirk) — falls through to redirect', async () => {
+    signInEmailMock.mockResolvedValue({} as never);
 
     await loginAction({}, mkFormData());
 
