@@ -263,10 +263,7 @@ Implemented per `docs/superpowers/plans/2026-05-16-phase-1a-m5-payment-reversal.
 - Cannot reverse an already-reversed payment
 
 ### M6 · Users management
-- Users list / new (auto-generate temp password, copy-to-clipboard button) / deactivate / re-activate
-- OWNER-only gate enforced in `app/(authenticated)/users/layout.tsx`
-- New user marked `mustChangePassword=true` — existing onboarding flow handles first login
-- Deactivated user cannot sign in (mechanism: server action drops their `auth.session` rows and a sign-in hook rejects users with `deactivatedAt IS NOT NULL`; exact wiring decided during M6 implementation)
+- Implemented per `docs/superpowers/plans/2026-05-16-phase-1a-m6-users-management.md`.
 
 **Acceptance**
 - OWNER creates STAFF user; copies temp password; signs out; signs in as STAFF; forced through onboarding; lands on dashboard with no Users tab visible
