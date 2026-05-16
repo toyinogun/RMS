@@ -13,6 +13,6 @@ images:
   # To bump: read the new digest from ghcr's manifests endpoint and replace
   # below. See README "Updating a version".
   - name: ghcr.io/toyinogun/rms
-    digest: sha256:fe9b45555789218812d52d7d59ba1348e7d515f370e1f208fdd36e32e56e2962
+    digest: sha256:79847a18594f1177b1c10796a31573b7210f5a34864236da375421bbb78fb2db
   - name: ghcr.io/toyinogun/rms-migrate
-    digest: sha256:9eec9e4b76eb079517a8a0501047821079837944d6df0290677b8539deaa0085
+    digest: sha256:e2299c48f516920c346ae03bef790840092acc0377ba6b7c00390b77fede441b
