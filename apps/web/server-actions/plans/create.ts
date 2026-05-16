@@ -7,6 +7,7 @@ import {
   createPlan,
   PropertyNotAvailableError,
   CustomerNotFoundError,
+  PlanCreateRetryableSerializationError,
 } from '@solutio/db/plans-service';
 import { getTenantContext } from '@/lib/tenant-context';
 import { hasRole } from '@solutio/shared/tenant';
@@ -59,6 +60,10 @@ export async function createPlanAction(
     termMonths: formData.get('termMonths'),
     startDate: formData.get('startDate'),
     depositReceived: formData.get('depositReceived') === 'true',
+    depositMethod: formData.get('depositMethod')?.toString() || undefined,
+    depositPaidAt: formData.get('depositPaidAt')?.toString() || undefined,
+    depositReference: formData.get('depositReference')?.toString() || undefined,
+    depositNotes: formData.get('depositNotes')?.toString() || undefined,
   });
   if (!parsed.success) {
     return {
@@ -68,24 +73,47 @@ export async function createPlanAction(
     };
   }
 
+  // Retry-once on SERIALIZABLE serialization conflict. The DB layer surfaces
+  // P2034 → PlanCreateRetryableSerializationError; a second concurrent loser
+  // is unlikely after the first attempt re-snapshots the property row.
+  let created: { id: string };
   try {
-    const created = await createPlan(ctx, parsed.data);
-    revalidatePath('/plans');
-    revalidatePath('/properties');
-    return { ok: true, data: { id: created.id } };
+    created = await createPlan(ctx, parsed.data);
   } catch (err) {
-    if (err instanceof PropertyNotAvailableError) {
-      return {
-        ok: false,
-        message: 'That property is no longer available. Refresh and try again.',
-      };
+    if (err instanceof PlanCreateRetryableSerializationError) {
+      try {
+        created = await createPlan(ctx, parsed.data);
+      } catch (retryErr) {
+        if (retryErr instanceof PlanCreateRetryableSerializationError) {
+          return {
+            ok: false,
+            message: 'Could not create plan due to a concurrent update. Try again.',
+          };
+        }
+        return mapCreatePlanError(retryErr);
+      }
+    } else {
+      return mapCreatePlanError(err);
     }
-    if (err instanceof CustomerNotFoundError) {
-      return {
-        ok: false,
-        message: 'Selected customer no longer exists. Refresh and try again.',
-      };
-    }
-    throw err;
   }
+
+  revalidatePath('/plans');
+  revalidatePath('/properties');
+  return { ok: true, data: { id: created.id } };
+}
+
+function mapCreatePlanError(err: unknown): PlanCreateState {
+  if (err instanceof PropertyNotAvailableError) {
+    return {
+      ok: false,
+      message: 'That property is no longer available. Refresh and try again.',
+    };
+  }
+  if (err instanceof CustomerNotFoundError) {
+    return {
+      ok: false,
+      message: 'Selected customer no longer exists. Refresh and try again.',
+    };
+  }
+  throw err;
 }

@@ -1,6 +1,6 @@
 import type { Kobo } from '../money/index';
 
-export type PaymentMethod = 'CASH' | 'TRANSFER' | 'CHEQUE' | 'CARD_MANUAL' | 'OTHER';
+export type { PaymentMethod } from './schemas';
 
 export type InstallmentRow = {
   id: string;

@@ -280,6 +280,183 @@ describe('BuyerOnboardingWizard', () => {
     expect(routerPushMock).not.toHaveBeenCalled();
   });
 
+  test('deposit toggle off (default): FormData has no deposit subfields', async () => {
+    createPlanActionMock.mockResolvedValue({ ok: true, data: { id: 'plan-1' } });
+    const user = userEvent.setup();
+    render(<BuyerOnboardingWizard customers={customers} properties={properties} />);
+
+    await user.click(screen.getByLabelText(/search buyers/i));
+    await user.click(await screen.findByRole('option', { name: /tunde bakare/i }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+
+    await user.click(await screen.findByRole('option', { name: /cedar-12/i }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+
+    await user.clear(screen.getByLabelText(/down payment today/i));
+    await user.type(screen.getByLabelText(/down payment today/i), '500,000');
+    await user.type(screen.getByLabelText(/monthly amount/i), '500,000');
+
+    // Toggle deliberately left OFF — the new toggle exists but is unchecked.
+    const toggle = screen.getByLabelText(/deposit received today/i);
+    expect(toggle).not.toBeChecked();
+    // Method/date fields are not rendered while toggle is off.
+    expect(screen.queryByLabelText(/^method$/i)).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: /preview schedule/i }));
+    await user.click(await screen.findByRole('button', { name: /confirm sale/i }));
+
+    const fd = createPlanActionMock.mock.calls[0]![1] as FormData;
+    expect(fd.get('depositReceived')).toBe('false');
+    expect(fd.has('depositMethod')).toBe(false);
+    expect(fd.has('depositPaidAt')).toBe(false);
+    expect(fd.has('depositReference')).toBe(false);
+    expect(fd.has('depositNotes')).toBe(false);
+  });
+
+  test('deposit toggle on with default method: FormData has depositReceived=true + depositMethod only', async () => {
+    createPlanActionMock.mockResolvedValue({ ok: true, data: { id: 'plan-2' } });
+    const user = userEvent.setup();
+    render(<BuyerOnboardingWizard customers={customers} properties={properties} />);
+
+    await user.click(screen.getByLabelText(/search buyers/i));
+    await user.click(await screen.findByRole('option', { name: /tunde bakare/i }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+
+    await user.click(await screen.findByRole('option', { name: /cedar-12/i }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+
+    await user.clear(screen.getByLabelText(/down payment today/i));
+    await user.type(screen.getByLabelText(/down payment today/i), '500,000');
+    await user.type(screen.getByLabelText(/monthly amount/i), '500,000');
+
+    // Flip the toggle on. Method panel becomes visible with CASH as default.
+    await user.click(screen.getByLabelText(/deposit received today/i));
+    expect(screen.getByLabelText(/^method/i)).toHaveValue('CASH');
+
+    await user.click(screen.getByRole('button', { name: /preview schedule/i }));
+    await user.click(await screen.findByRole('button', { name: /confirm sale/i }));
+
+    const fd = createPlanActionMock.mock.calls[0]![1] as FormData;
+    expect(fd.get('depositReceived')).toBe('true');
+    expect(fd.get('depositMethod')).toBe('CASH');
+    // Optional text fields are absent when blank — lets the server fall back to its defaults.
+    expect(fd.has('depositPaidAt')).toBe(false);
+    expect(fd.has('depositReference')).toBe(false);
+    expect(fd.has('depositNotes')).toBe(false);
+  });
+
+  test('deposit toggle on with all fields filled: FormData carries every deposit field', async () => {
+    createPlanActionMock.mockResolvedValue({ ok: true, data: { id: 'plan-3' } });
+    const user = userEvent.setup();
+    render(<BuyerOnboardingWizard customers={customers} properties={properties} />);
+
+    await user.click(screen.getByLabelText(/search buyers/i));
+    await user.click(await screen.findByRole('option', { name: /tunde bakare/i }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+
+    await user.click(await screen.findByRole('option', { name: /cedar-12/i }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+
+    await user.clear(screen.getByLabelText(/down payment today/i));
+    await user.type(screen.getByLabelText(/down payment today/i), '500,000');
+    await user.type(screen.getByLabelText(/monthly amount/i), '500,000');
+
+    await user.click(screen.getByLabelText(/deposit received today/i));
+    await user.selectOptions(screen.getByLabelText(/^method/i), 'TRANSFER');
+    // Server requires depositPaidAt >= startDate. startDate defaults to today
+    // via the wizard's todayIso(), so the canonical "deposit at plan start"
+    // case is depositPaidAt === startDate.
+    const startDateValue = (
+      screen.getByLabelText(/first payment date/i) as HTMLInputElement
+    ).value;
+    // The date input uses native YYYY-MM-DD format.
+    await user.type(screen.getByLabelText(/^date$/i), startDateValue);
+    await user.type(
+      screen.getByLabelText(/reference \(optional\)/i),
+      'TX-77231',
+    );
+    await user.type(
+      screen.getByLabelText(/notes \(optional\)/i),
+      'Paid in branch',
+    );
+
+    await user.click(screen.getByRole('button', { name: /preview schedule/i }));
+    await user.click(await screen.findByRole('button', { name: /confirm sale/i }));
+
+    const fd = createPlanActionMock.mock.calls[0]![1] as FormData;
+    expect(fd.get('depositReceived')).toBe('true');
+    expect(fd.get('depositMethod')).toBe('TRANSFER');
+    expect(fd.get('depositPaidAt')).toBe(startDateValue);
+    expect(fd.get('depositReference')).toBe('TX-77231');
+    expect(fd.get('depositNotes')).toBe('Paid in branch');
+  });
+
+  test('deposit date input min attribute equals startDate (cannot backdate before plan start)', async () => {
+    const user = userEvent.setup();
+    render(<BuyerOnboardingWizard customers={customers} properties={properties} />);
+
+    await user.click(screen.getByLabelText(/search buyers/i));
+    await user.click(await screen.findByRole('option', { name: /tunde bakare/i }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+
+    await user.click(await screen.findByRole('option', { name: /cedar-12/i }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+
+    // Reveal the deposit date input by flipping the toggle on.
+    await user.click(screen.getByLabelText(/deposit received today/i));
+
+    const startDate = (
+      screen.getByLabelText(/first payment date/i) as HTMLInputElement
+    ).value;
+    const dateInput = screen.getByLabelText(/^date$/i);
+    // The deposit date input's lower bound mirrors startDate — backdating before
+    // the plan start would be rejected by the server (recordPayment refuses
+    // paidAt < plan.startDate), so the UI hints at it client-side.
+    expect(dateInput.getAttribute('min')).toBe(startDate);
+    // And specifically, `max` is NOT set to startDate (that would invert the constraint).
+    expect(dateInput.getAttribute('max')).toBeNull();
+  });
+
+  test('deposit toggle on with depositKobo=0: server-side validation rejection surfaces a banner', async () => {
+    // The wizard does not add a client-side guard for this case — the server-side
+    // refinement on the schema rejects depositReceived=true with depositKobo=0.
+    // We assert the actual behavior: form submits, server replies error, banner shows.
+    createPlanActionMock.mockResolvedValue({
+      ok: false,
+      message: 'Cannot record a deposit when the deposit amount is zero.',
+      fieldErrors: { depositReceived: 'Deposit amount must be > 0 to record a deposit' },
+    });
+    const user = userEvent.setup();
+    render(<BuyerOnboardingWizard customers={customers} properties={properties} />);
+
+    await user.click(screen.getByLabelText(/search buyers/i));
+    await user.click(await screen.findByRole('option', { name: /tunde bakare/i }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+
+    await user.click(await screen.findByRole('option', { name: /cedar-12/i }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+
+    // depositNgn stays at the default '0'. monthly tuned so the schedule still balances:
+    // 0 + 24 * 520,833.33 ≈ 12.5M (final row settles the remainder), so the wizard's
+    // own client balance check passes and we reach the server.
+    await user.clear(screen.getByLabelText(/down payment today/i));
+    await user.type(screen.getByLabelText(/down payment today/i), '0');
+    await user.type(screen.getByLabelText(/monthly amount/i), '520,000');
+
+    await user.click(screen.getByLabelText(/deposit received today/i));
+    await user.click(screen.getByRole('button', { name: /preview schedule/i }));
+    await user.click(await screen.findByRole('button', { name: /confirm sale/i }));
+
+    const fd = createPlanActionMock.mock.calls[0]![1] as FormData;
+    expect(fd.get('depositReceived')).toBe('true');
+    expect(fd.get('depositNgn')).toBe('0');
+
+    expect(
+      await screen.findByText(/cannot record a deposit when the deposit amount is zero/i),
+    ).toBeInTheDocument();
+    expect(routerPushMock).not.toHaveBeenCalled();
+  });
+
   test('server error after confirm surfaces a banner and keeps the user on review', async () => {
     createPlanActionMock.mockResolvedValue({
       ok: false,

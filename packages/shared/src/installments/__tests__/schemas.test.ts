@@ -84,13 +84,130 @@ describe('planCreateSchema', () => {
     expect(planCreateSchema.safeParse({ ...baseExistingCustomerInput(), termMonths: 37 }).success).toBe(false);
   });
 
-  test('rejects depositReceived: true with the M4 hint', () => {
-    const res = planCreateSchema.safeParse({ ...baseExistingCustomerInput(), depositReceived: true });
+  test('accepts depositReceived: true with depositMethod (M4)', () => {
+    const parsed = planCreateSchema.parse({
+      ...baseExistingCustomerInput(),
+      depositReceived: true,
+      depositMethod: 'CASH',
+    });
+    expect(parsed.depositReceived).toBe(true);
+    expect(parsed.depositMethod).toBe('CASH');
+    expect(parsed.depositPaidAt).toBeInstanceOf(Date);
+  });
+
+  test('rejects depositReceived: true with zero deposit', () => {
+    // Bump monthlyNgn so deposit (0) + monthly × term ≥ total — otherwise the underfunded
+    // refine also fires and the assertion below becomes fragile (multi-issue match).
+    // 210,000 × 24 = 5,040,000 ≥ 5,000,000 (total).
+    const res = planCreateSchema.safeParse({
+      ...baseExistingCustomerInput(),
+      depositNgn: '0',
+      monthlyNgn: '210,000',
+      depositReceived: true,
+      depositMethod: 'CASH',
+    });
     expect(res.success).toBe(false);
     if (!res.success) {
       const msgs = res.error.issues.map((i) => i.message);
-      expect(msgs.some((m) => m.includes('M4'))).toBe(true);
+      expect(
+        msgs.some((m) => m.includes('Deposit amount is required when deposit is being recorded')),
+      ).toBe(true);
     }
+  });
+
+  test('rejects depositReceived: true without depositMethod', () => {
+    const res = planCreateSchema.safeParse({
+      ...baseExistingCustomerInput(),
+      depositReceived: true,
+    });
+    expect(res.success).toBe(false);
+    if (!res.success) {
+      const msgs = res.error.issues.map((i) => i.message);
+      expect(
+        msgs.some((m) => m.includes('Payment method is required when recording a deposit')),
+      ).toBe(true);
+    }
+  });
+
+  test('defaults depositPaidAt to startDate when omitted', () => {
+    const parsed = planCreateSchema.parse({
+      ...baseExistingCustomerInput(),
+      depositReceived: true,
+      depositMethod: 'TRANSFER',
+    });
+    expect(parsed.depositPaidAt).toBeInstanceOf(Date);
+    expect(parsed.depositPaidAt?.getTime()).toBe(parsed.startDate.getTime());
+  });
+
+  test('uses provided depositPaidAt over startDate default', () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const parsed = planCreateSchema.parse({
+      ...baseExistingCustomerInput(),
+      depositReceived: true,
+      depositMethod: 'CASH',
+      depositPaidAt: today,
+    });
+    expect(parsed.depositPaidAt).toBeInstanceOf(Date);
+    expect(parsed.depositPaidAt?.toISOString().slice(0, 10)).toBe(today);
+    expect(parsed.depositPaidAt?.getTime()).not.toBe(parsed.startDate.getTime());
+  });
+
+  test('rejects depositPaidAt more than 1 day in the future', () => {
+    const future = new Date();
+    future.setUTCDate(future.getUTCDate() + 3);
+    const res = planCreateSchema.safeParse({
+      ...baseExistingCustomerInput(),
+      depositReceived: true,
+      depositMethod: 'CASH',
+      depositPaidAt: future.toISOString().slice(0, 10),
+    });
+    expect(res.success).toBe(false);
+    if (!res.success) {
+      expect(res.error.issues.some((i) => /future/i.test(i.message))).toBe(true);
+    }
+  });
+
+  test('accepts every payment method value via depositMethod', () => {
+    for (const method of ['CASH', 'TRANSFER', 'CHEQUE', 'CARD_MANUAL', 'OTHER'] as const) {
+      const parsed = planCreateSchema.parse({
+        ...baseExistingCustomerInput(),
+        depositReceived: true,
+        depositMethod: method,
+      });
+      expect(parsed.depositMethod).toBe(method);
+    }
+  });
+
+  test('trims depositReference and depositNotes; empty becomes undefined', () => {
+    const parsed = planCreateSchema.parse({
+      ...baseExistingCustomerInput(),
+      depositReceived: true,
+      depositMethod: 'CASH',
+      depositReference: '  REF-123  ',
+      depositNotes: '   ',
+    });
+    expect(parsed.depositReference).toBe('REF-123');
+    expect(parsed.depositNotes).toBeUndefined();
+  });
+
+  test('rejects depositReference longer than 100 characters', () => {
+    const res = planCreateSchema.safeParse({
+      ...baseExistingCustomerInput(),
+      depositReceived: true,
+      depositMethod: 'CASH',
+      depositReference: 'x'.repeat(101),
+    });
+    expect(res.success).toBe(false);
+  });
+
+  test('rejects depositNotes longer than 500 characters', () => {
+    const res = planCreateSchema.safeParse({
+      ...baseExistingCustomerInput(),
+      depositReceived: true,
+      depositMethod: 'CASH',
+      depositNotes: 'x'.repeat(501),
+    });
+    expect(res.success).toBe(false);
   });
 
   test('rejects past startDate beyond grace', () => {
@@ -107,6 +224,58 @@ describe('planCreateSchema', () => {
     const today = new Date().toISOString().slice(0, 10);
     const res = planCreateSchema.safeParse({ ...baseExistingCustomerInput(), startDate: today });
     expect(res.success).toBe(true);
+  });
+
+  test('rejects invalid startDate string', () => {
+    const res = planCreateSchema.safeParse({
+      ...baseExistingCustomerInput(),
+      startDate: 'not-a-real-date',
+    });
+    expect(res.success).toBe(false);
+    if (!res.success) {
+      const msgs = res.error.issues.map((i) => i.message);
+      expect(msgs.some((m) => m.toLowerCase().includes('invalid start date'))).toBe(true);
+    }
+  });
+
+  test('rejects totalPrice of zero', () => {
+    const res = planCreateSchema.safeParse({
+      ...baseExistingCustomerInput(),
+      totalPriceNgn: '0',
+    });
+    expect(res.success).toBe(false);
+    if (!res.success) {
+      const msgs = res.error.issues.map((i) => i.message);
+      expect(msgs.some((m) => m.includes('Total price must be greater than zero'))).toBe(true);
+    }
+  });
+
+  test('rejects monthly of zero', () => {
+    const res = planCreateSchema.safeParse({
+      ...baseExistingCustomerInput(),
+      monthlyNgn: '0',
+    });
+    expect(res.success).toBe(false);
+    if (!res.success) {
+      const msgs = res.error.issues.map((i) => i.message);
+      expect(msgs.some((m) => m.includes('Monthly amount must be greater than zero'))).toBe(true);
+    }
+  });
+
+  test('coerces empty new-customer nationalId and notes to undefined', () => {
+    const parsed = planCreateSchema.parse({
+      ...baseExistingCustomerInput(),
+      customer: {
+        mode: 'new',
+        fullName: 'Chi Eze',
+        phone: '+2348012345002',
+        nationalId: '   ',
+        notes: '',
+      },
+    });
+    if (parsed.customer.mode !== 'new') throw new Error('expected new mode');
+    expect(parsed.customer.nationalId).toBeUndefined();
+    expect(parsed.customer.notes).toBeUndefined();
   });
 
   test('rejects invalid customer.mode value', () => {

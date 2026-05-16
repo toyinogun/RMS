@@ -186,6 +186,110 @@ describe('plans-service.createPlan', () => {
       createPlan(ctxA, baseCreateInput({ propertyId: propertyInB.id })),
     ).rejects.toBeInstanceOf(PropertyNotAvailableError);
   });
+
+  test('depositReceived: true records deposit + flips plan ACTIVE + property SOLD', async () => {
+    const ctx = ctxFor(TENANT_A);
+    const property = await seedAvailableProperty(TENANT_A);
+    const input = baseCreateInput({
+      propertyId: property.id,
+      depositReceived: true,
+      depositMethod: 'CASH',
+      depositReference: 'TEL-001',
+      depositNotes: 'walk-in',
+    });
+    const { id } = await createPlan(ctx, input);
+
+    const plan = await pg.prisma.plan.findUnique({
+      where: { id },
+      include: { installments: { orderBy: { sequenceNo: 'asc' } } },
+    });
+    expect(plan!.status).toBe('ACTIVE');
+    expect(plan!.installments[0]!.amountPaidKobo).toBe(50_000_000n);
+    expect(plan!.installments[0]!.status).toBe('PAID');
+    // Non-deposit rows untouched.
+    expect(plan!.installments[1]!.amountPaidKobo).toBe(0n);
+    expect(plan!.installments[1]!.status).toBe('PENDING');
+
+    const propAfter = await pg.prisma.property.findUnique({ where: { id: property.id } });
+    expect(propAfter!.status).toBe('SOLD');
+
+    const payments = await pg.prisma.payment.findMany({ where: { planId: id } });
+    expect(payments).toHaveLength(1);
+    expect(payments[0]!.amountKobo).toBe(50_000_000n);
+    expect(payments[0]!.method).toBe('CASH');
+    expect(payments[0]!.reference).toBe('TEL-001');
+    expect(payments[0]!.notes).toBe('walk-in');
+    expect(payments[0]!.recordedBy).toBe(ctx.user.id);
+    // depositPaidAt was omitted from the input — service defaults it to startDate.
+    expect(payments[0]!.paidAt.toISOString().slice(0, 10)).toBe(
+      input.startDate.toISOString().slice(0, 10),
+    );
+
+    const allocations = await pg.prisma.paymentAllocation.findMany({
+      where: { paymentId: payments[0]!.id },
+    });
+    expect(allocations).toHaveLength(1);
+    expect(allocations[0]!.installmentId).toBe(plan!.installments[0]!.id);
+    expect(allocations[0]!.amountKobo).toBe(50_000_000n);
+  });
+
+  test('depositReceived: true against non-AVAILABLE property rolls back everything', async () => {
+    const ctx = ctxFor(TENANT_A);
+    const property = await seedAvailableProperty(TENANT_A);
+    await pg.prisma.property.update({
+      where: { id: property.id },
+      data: { status: 'RESERVED' },
+    });
+
+    const customersBefore = await pg.prisma.customer.count({
+      where: { tenantId: TENANT_A, fullName: 'Deposit Rollback' },
+    });
+    const plansBefore = await pg.prisma.plan.count({
+      where: { tenantId: TENANT_A, propertyId: property.id },
+    });
+    const installmentsBefore = await pg.prisma.installment.count({
+      where: { tenantId: TENANT_A, plan: { propertyId: property.id } },
+    });
+    const paymentsBefore = await pg.prisma.payment.count({
+      where: { tenantId: TENANT_A, plan: { propertyId: property.id } },
+    });
+
+    await expect(
+      createPlan(
+        ctx,
+        baseCreateInput({
+          propertyId: property.id,
+          customer: { mode: 'new', fullName: 'Deposit Rollback', phone: '+2348010099887' },
+          depositReceived: true,
+          depositMethod: 'CASH',
+        }),
+      ),
+    ).rejects.toBeInstanceOf(PropertyNotAvailableError);
+
+    expect(
+      await pg.prisma.customer.count({
+        where: { tenantId: TENANT_A, fullName: 'Deposit Rollback' },
+      }),
+    ).toBe(customersBefore);
+    expect(
+      await pg.prisma.plan.count({ where: { tenantId: TENANT_A, propertyId: property.id } }),
+    ).toBe(plansBefore);
+    expect(
+      await pg.prisma.installment.count({
+        where: { tenantId: TENANT_A, plan: { propertyId: property.id } },
+      }),
+    ).toBe(installmentsBefore);
+    expect(
+      await pg.prisma.payment.count({
+        where: { tenantId: TENANT_A, plan: { propertyId: property.id } },
+      }),
+    ).toBe(paymentsBefore);
+    expect(
+      await pg.prisma.paymentAllocation.count({
+        where: { tenantId: TENANT_A, payment: { plan: { propertyId: property.id } } },
+      }),
+    ).toBe(0);
+  });
 });
 
 describe('plans-service.cancelPlan', () => {

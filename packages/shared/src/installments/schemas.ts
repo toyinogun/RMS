@@ -1,41 +1,33 @@
 import { z } from 'zod';
-import { parseNgn } from '../money/parse';
+import { ngnAmount } from '../money/zod';
+import { optionalTrimmed, paidAtSchema, paymentMethodSchema } from '../payments/schemas';
 
 const MIN_TERM = 6;
 const MAX_TERM = 36;
-const START_DATE_GRACE_DAYS = 1;
+const DATE_GRACE_DAYS = 1;
+const DEPOSIT_REFERENCE_MAX = 100;
+const DEPOSIT_NOTES_MAX = 500;
 
-const ngnAmount = (label: string) =>
+const pastTolerantDateSchema = (label: string) =>
   z
     .string()
     .trim()
     .min(1, `${label} is required`)
     .transform((raw, ctx) => {
-      try {
-        return parseNgn(raw);
-      } catch {
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) {
         ctx.addIssue({ code: 'custom', message: `Invalid ${label.toLowerCase()}` });
         return z.NEVER;
       }
+      const graceMs = DATE_GRACE_DAYS * 24 * 60 * 60 * 1000;
+      if (d.getTime() < Date.now() - graceMs) {
+        ctx.addIssue({ code: 'custom', message: `${label} cannot be in the past` });
+        return z.NEVER;
+      }
+      return d;
     });
 
-const startDateSchema = z
-  .string()
-  .trim()
-  .min(1, 'Start date is required')
-  .transform((raw, ctx) => {
-    const d = new Date(raw);
-    if (Number.isNaN(d.getTime())) {
-      ctx.addIssue({ code: 'custom', message: 'Invalid start date' });
-      return z.NEVER;
-    }
-    const graceMs = START_DATE_GRACE_DAYS * 24 * 60 * 60 * 1000;
-    if (d.getTime() < Date.now() - graceMs) {
-      ctx.addIssue({ code: 'custom', message: 'Start date cannot be in the past' });
-      return z.NEVER;
-    }
-    return d;
-  });
+const startDateSchema = pastTolerantDateSchema('Start date');
 
 const customerExistingSchema = z.object({
   mode: z.literal('existing'),
@@ -84,8 +76,12 @@ const planCoreFields = z.object({
     .min(MIN_TERM, `Term must be at least ${MIN_TERM} months`)
     .max(MAX_TERM, `Term cannot exceed ${MAX_TERM} months`),
   startDate: startDateSchema,
-  // M4 widens this to a boolean. Until then, deposit-at-creation is disabled.
   depositReceived: z.boolean().default(false),
+  // M4 deposit-at-creation subfields — only consumed when depositReceived === true.
+  depositMethod: paymentMethodSchema.optional(),
+  depositPaidAt: paidAtSchema.optional(),
+  depositReference: optionalTrimmed('Reference', DEPOSIT_REFERENCE_MAX),
+  depositNotes: optionalTrimmed('Notes', DEPOSIT_NOTES_MAX),
 });
 
 export const planCreateSchema = planCoreFields
@@ -96,13 +92,6 @@ export const planCreateSchema = planCoreFields
     monthlyKobo: monthlyNgn,
   }))
   .superRefine((val, ctx) => {
-    if (val.depositReceived) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['depositReceived'],
-        message: 'Recording deposit at plan creation will be enabled in M4',
-      });
-    }
     if (val.totalPriceKobo <= 0n) {
       ctx.addIssue({
         code: 'custom',
@@ -139,6 +128,28 @@ export const planCreateSchema = planCoreFields
         message: 'Deposit plus monthly × term is less than the total price',
       });
     }
+    if (val.depositReceived) {
+      if (val.depositKobo === 0n) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['depositNgn'],
+          message: 'Deposit amount is required when deposit is being recorded',
+        });
+      }
+      if (val.depositMethod === undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['depositMethod'],
+          message: 'Payment method is required when recording a deposit',
+        });
+      }
+    }
+  })
+  .transform((val) => {
+    if (val.depositReceived && val.depositPaidAt === undefined) {
+      return { ...val, depositPaidAt: val.startDate };
+    }
+    return val;
   });
 export type PlanCreateInput = z.infer<typeof planCreateSchema>;
 

@@ -56,9 +56,12 @@ test('M3: create DRAFT plan with materialized installments, then cancel', async 
   await page.getByRole('button', { name: /^continue$/i }).click();
 
   // Step 3 — payment terms. Total prefills from the property; fix deposit/monthly/term.
+  // Numbers chosen so 5M − 500k = 4.5M = 24 × 187,500 exactly (clean schedule, every
+  // installment the same amount; satisfies the wizard's finalRow > 0n && <= 2×monthly
+  // guard).
   await expect(page.getByRole('heading', { name: /payment terms/i })).toBeVisible();
   await page.getByLabel(/down payment today/i).fill('500,000');
-  await page.getByLabel(/monthly amount/i).fill('200,000');
+  await page.getByLabel(/monthly amount/i).fill('187,500');
   await page.getByLabel(/term \(months/i).fill('24');
   await page.getByRole('button', { name: /preview schedule/i }).click();
 

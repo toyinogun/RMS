@@ -1,8 +1,23 @@
 export { prisma } from './client';
 export { forTenant, CrossTenantWriteError } from './tenant-client';
 export type { TenantPrismaClient } from './tenant-client';
-export { recordPayment } from './payments-service';
-export type { RecordPaymentInput } from './payments-service';
+export {
+  recordPayment,
+  listPaymentsForPlan,
+  PlanNotPayableError,
+  PaymentBeforePlanStartError,
+  PaymentOverpayError,
+  AllocationInstallmentNotFoundError,
+  AllocationAgainstPaidInstallmentError,
+  AllocationDuplicateInstallmentError,
+  AllocationExceedsOutstandingError,
+  PaymentRetryableSerializationError,
+} from './payments-service';
+export type {
+  PaymentRecordInput,
+  RecordPaymentResult,
+  PaymentListRow,
+} from './payments-service';
 export type * from '@prisma/client';
 export {
   createCustomer,
@@ -33,4 +48,5 @@ export {
   PlanNotFoundError,
   PlanHasPaymentsError,
   PropertyNotAvailableError,
+  PlanCreateRetryableSerializationError,
 } from './plans-service';
