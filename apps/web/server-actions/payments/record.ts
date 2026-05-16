@@ -19,15 +19,13 @@ import type { RecordPaymentResult } from '@solutio/db/payments-service';
 import { PlanNotFoundError } from '@solutio/db/plan-errors';
 import { getTenantContext } from '@/lib/tenant-context';
 import { hasRole } from '@solutio/shared/tenant';
+import { PAYMENT_RETRY_FAILURE_MESSAGE } from './messages';
 
 // Reuse the service's PlanStatus shape without importing @prisma/client into
 // apps/web — keeps the bundler off the generated Prisma runtime.
 type PlanStatus = RecordPaymentResult['planStatus'];
 
 const MAX_ALLOCATION_ROWS = 60; // Plans never exceed 36 installments; 60 leaves headroom.
-
-export const PAYMENT_RETRY_FAILURE_MESSAGE =
-  'Could not record payment due to a concurrent update. Try again.';
 
 export type PaymentRecordState =
   | { ok: true; data: { paymentId: string; planStatus: PlanStatus } }

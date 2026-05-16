@@ -19,10 +19,8 @@ import {
   type PaymentMethod,
 } from '@solutio/shared/payments';
 import type { InstallmentStatus } from '@solutio/shared/installments';
-import {
-  PAYMENT_RETRY_FAILURE_MESSAGE,
-  type PaymentRecordState,
-} from '@/server-actions/payments/record';
+import type { PaymentRecordState } from '@/server-actions/payments/record';
+import { PAYMENT_RETRY_FAILURE_MESSAGE } from '@/server-actions/payments/messages';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';

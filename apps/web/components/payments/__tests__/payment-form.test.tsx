@@ -19,7 +19,7 @@ vi.mock('sonner', () => ({
 }));
 
 import { PaymentForm } from '../payment-form';
-import { PAYMENT_RETRY_FAILURE_MESSAGE } from '@/server-actions/payments/record';
+import { PAYMENT_RETRY_FAILURE_MESSAGE } from '@/server-actions/payments/messages';
 
 const PLAN_ID = '550e8400-e29b-41d4-a716-446655440010';
 const INST_1 = '550e8400-e29b-41d4-a716-446655440101';
