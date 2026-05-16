@@ -8,10 +8,10 @@
  *   1. Plan creation with the new "Deposit received today" toggle ON.
  *      → Plan is ACTIVE (not DRAFT) on landing; deposit Payment row exists;
  *        property flips to SOLD; first installment (seq 0) is PAID.
- *   2. Auto-mode (FIFO) ad-hoc payment for ₦200,000 → seq 1 PAID.
- *   3. Manual-override ad-hoc payment for ₦500,000 — verifies the FIFO
- *      pre-fill shows {seq 2: 200k, seq 3: 200k, seq 4: 100k} and the
- *      Unallocated strip reads ₦0 before submit → seq 2 PAID, seq 3 PAID,
+ *   2. Auto-mode (FIFO) ad-hoc payment for ₦187,500 → seq 1 PAID.
+ *   3. Manual-override ad-hoc payment for ₦475,000 — verifies the FIFO
+ *      pre-fill shows {seq 2: 187,500, seq 3: 187,500, seq 4: 100,000} and
+ *      the Unallocated strip reads ₦0 before submit → seq 2 PAID, seq 3 PAID,
  *      seq 4 PARTIAL (₦100,000 paid).
  *   4. Overpay attempt (₦99,999,999) is rejected — no redirect, error
  *      surfaced.
@@ -98,9 +98,11 @@ test('M4: deposit-on-create + ad-hoc payments (auto/manual/overpay)', async ({ p
   await page.getByRole('button', { name: /^continue$/i }).click();
 
   // Step 3 — payment terms + flip the deposit toggle ON.
+  // 5M − 500k = 4.5M = 24 × 187,500 exactly. Clean schedule, every monthly
+  // row equal, satisfies the wizard's finalRow > 0n && <= 2×monthly guard.
   await expect(page.getByRole('heading', { name: /payment terms/i })).toBeVisible();
   await page.getByLabel(/down payment today/i).fill('500,000');
-  await page.getByLabel(/monthly amount/i).fill('200,000');
+  await page.getByLabel(/monthly amount/i).fill('187,500');
   await page.getByLabel(/term \(months/i).fill('24');
 
   // Toggle "Deposit received today" — this is the Task 9 addition.
@@ -179,12 +181,12 @@ test('M4: deposit-on-create + ad-hoc payments (auto/manual/overpay)', async ({ p
   await expect(page).toHaveURL(new RegExp(`/plans/${planId}/payments/new$`));
 
   // ------------------------------------------------------------------ //
-  // 9. Auto-mode payment: ₦200,000, CASH default                        //
+  // 9. Auto-mode payment: ₦187,500 (exact next-installment amount), CASH default //
   // ------------------------------------------------------------------ //
   // Use the id directly — the label text "Amount *" plus per-row
   // aria-labels ("Allocation for installment N") would otherwise need
   // a tricky regex to disambiguate.
-  await page.locator('#amountNgn').fill('200,000');
+  await page.locator('#amountNgn').fill('187,500');
   // Method defaults to CASH; the auto radio is the default. Submit.
   await page.getByRole('button', { name: /^record payment$/i }).click();
 
@@ -212,24 +214,24 @@ test('M4: deposit-on-create + ad-hoc payments (auto/manual/overpay)', async ({ p
   await expect(installmentsAfterAuto.nth(2)).toContainText('PENDING');
 
   // ------------------------------------------------------------------ //
-  // 10. Manual-override payment: ₦500,000 → seq 2 (200k) + seq 3 (200k) //
-  //     + seq 4 (100k). Verify FIFO pre-fill before submitting.         //
+  // 10. Manual-override payment: ₦475,000 → seq 2 (187,500) + seq 3 (187,500) //
+  //     + seq 4 (100,000). Verify FIFO pre-fill before submitting.      //
   // ------------------------------------------------------------------ //
   await page.getByRole('link', { name: /record payment/i }).click();
   await expect(page).toHaveURL(new RegExp(`/plans/${planId}/payments/new$`));
 
-  await page.locator('#amountNgn').fill('500,000');
+  await page.locator('#amountNgn').fill('475,000');
 
   // Switch to Manual mode. The visible <input type="radio"> is sr-only but
   // the wrapper <label> carries the "Manual override" text.
   await page.getByText(/manual override/i).click();
 
   // The manual-balance strip appears with Unallocated: ₦0 because the
-  // FIFO pre-fill exactly covers the amount (200k + 200k + 100k = 500k).
+  // FIFO pre-fill exactly covers the amount (187,500 + 187,500 + 100,000 = 475,000).
   const balanceStrip = page.getByTestId('manual-balance-strip');
   await expect(balanceStrip).toBeVisible();
   await expect(balanceStrip).toContainText(/unallocated:\s*₦0/i);
-  await expect(balanceStrip).toContainText(/allocated:\s*₦500,000/i);
+  await expect(balanceStrip).toContainText(/allocated:\s*₦475,000/i);
 
   // Sanity-check the per-row pre-fill. After payments #1 (deposit, seq 0)
   // and #2 (auto, seq 1), the non-paid installments shown in the manual
@@ -238,10 +240,10 @@ test('M4: deposit-on-create + ad-hoc payments (auto/manual/overpay)', async ({ p
   // toContainText — input values do not surface as text content).
   await expect(
     page.getByTestId('allocation-row-0').getByRole('textbox'),
-  ).toHaveValue('200,000');
+  ).toHaveValue('187,500');
   await expect(
     page.getByTestId('allocation-row-1').getByRole('textbox'),
-  ).toHaveValue('200,000');
+  ).toHaveValue('187,500');
   await expect(
     page.getByTestId('allocation-row-2').getByRole('textbox'),
   ).toHaveValue('100,000');
