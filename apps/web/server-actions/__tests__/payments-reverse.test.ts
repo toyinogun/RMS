@@ -1,4 +1,5 @@
 import { describe, expect, test, vi, beforeEach } from 'vitest';
+import type * as TenantModule from '@solutio/shared/tenant';
 
 vi.mock('@/lib/tenant-context', () => ({ getTenantContext: vi.fn() }));
 vi.mock('@solutio/db/payments-service', () => ({
@@ -29,9 +30,7 @@ vi.mock('@solutio/db/payments-service', () => ({
   },
 }));
 vi.mock('@solutio/shared/tenant', async () => {
-  const actual = await vi.importActual<typeof import('@solutio/shared/tenant')>(
-    '@solutio/shared/tenant',
-  );
+  const actual = await vi.importActual<typeof TenantModule>('@solutio/shared/tenant');
   return {
     ...actual,
     ForbiddenError: class ForbiddenError extends Error {
