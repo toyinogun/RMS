@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { paymentRecordSchema } from '../schemas.js';
+import { paymentRecordSchema, paymentReversalSchema } from '../schemas.js';
 
 const PLAN_ID = '01935b7e-0000-7000-8000-aaaaaaaaaaaa';
 const INST_A = '01935b7e-0000-7000-8000-bbbbbbbbbbbb';
@@ -216,4 +216,67 @@ describe('paymentRecordSchema', () => {
     const res = paymentRecordSchema.safeParse({ ...baseInput(), planId: 'not-a-uuid' });
     expect(res.success).toBe(false);
   });
+});
+
+const PAYMENT_ID = '01935b7e-0000-7000-8000-dddddddddddd';
+
+describe('paymentReversalSchema', () => {
+  test('parses minimal input (paymentId only, no reason)', () => {
+    const parsed = paymentReversalSchema.parse({ paymentId: PAYMENT_ID });
+    expect(parsed.paymentId).toBe(PAYMENT_ID);
+    expect(parsed.reason).toBeUndefined();
+  });
+
+  test('parses input with reason', () => {
+    const parsed = paymentReversalSchema.parse({
+      paymentId: PAYMENT_ID,
+      reason: 'Customer requested refund',
+    });
+    expect(parsed.paymentId).toBe(PAYMENT_ID);
+    expect(parsed.reason).toBe('Customer requested refund');
+  });
+
+  test('rejects non-uuid paymentId', () => {
+    const res = paymentReversalSchema.safeParse({ paymentId: 'not-a-uuid' });
+    expect(res.success).toBe(false);
+    if (!res.success) {
+      expect(res.error.issues.some((i) => /invalid payment id/i.test(i.message))).toBe(true);
+    }
+  });
+
+  test('rejects reason longer than 500 chars', () => {
+    const res = paymentReversalSchema.safeParse({
+      paymentId: PAYMENT_ID,
+      reason: 'r'.repeat(501),
+    });
+    expect(res.success).toBe(false);
+    if (!res.success) {
+      expect(res.error.issues.some((i) => /500 characters or fewer/i.test(i.message))).toBe(true);
+    }
+  });
+
+  test('trims reason and treats whitespace-only as absent (undefined)', () => {
+    const parsed = paymentReversalSchema.parse({
+      paymentId: PAYMENT_ID,
+      reason: '   ',
+    });
+    expect(parsed.reason).toBeUndefined();
+  });
+
+  test('trims leading/trailing whitespace from reason', () => {
+    const parsed = paymentReversalSchema.parse({
+      paymentId: PAYMENT_ID,
+      reason: '  duplicate payment  ',
+    });
+    expect(parsed.reason).toBe('duplicate payment');
+  });
+
+  test('accepts reason exactly at 500 chars', () => {
+    const res = paymentReversalSchema.safeParse({
+      paymentId: PAYMENT_ID,
+      reason: 'r'.repeat(500),
+    });
+    expect(res.success).toBe(true);
+  });
+
 });

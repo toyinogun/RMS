@@ -101,7 +101,12 @@ export default async function PlanDetailPage({
           />
         </TabsContent>
         <TabsContent value="payments">
-          <PaymentsList payments={payments} />
+          <PaymentsList
+            payments={payments}
+            userRole={ctx.user.role}
+            planStatus={plan.status}
+            planId={plan.id}
+          />
         </TabsContent>
         <TabsContent value="actions">
           <div className="space-y-2 rounded-md border p-6 text-sm text-slate-500">

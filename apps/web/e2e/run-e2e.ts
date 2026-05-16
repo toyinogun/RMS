@@ -37,6 +37,11 @@ async function main(): Promise<number> {
     SEED_OWNER_EMAIL: 'owner@atrium.test',
     SEED_OWNER_PASSWORD: 'seedPassword!12345',
     SEED_OWNER_NAME: 'Atrium Owner',
+    // STAFF user — created during seed so M5 E2E can test role-gated UI
+    // without needing a user-management UI that does not yet exist.
+    SEED_STAFF_EMAIL: 'staff@atrium.test',
+    SEED_STAFF_PASSWORD: 'staffPassword!2026',
+    SEED_STAFF_NAME: 'Atrium Staff',
     BETTER_AUTH_USE_SECURE_COOKIES: 'false',
   };
 

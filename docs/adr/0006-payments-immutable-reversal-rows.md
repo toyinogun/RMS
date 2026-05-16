@@ -1,6 +1,6 @@
 # ADR 0006 — Payments immutable; corrections via reversing rows
 
-**Status:** Accepted (2026-05-12)
+**Status:** Implemented in M5 (2026-05-16) — see `docs/superpowers/plans/2026-05-16-phase-1a-m5-payment-reversal.md`. Accepted (2026-05-12).
 
 ## Context
 

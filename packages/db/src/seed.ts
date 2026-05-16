@@ -12,6 +12,12 @@ export type SeedAuthAdapter = {
    * Returns the stable auth user id used as the join key on the domain User row.
    */
   ensureOwnerAuthUser(email: string, password: string): Promise<{ authUserId: string }>;
+  /**
+   * Creates (or returns existing) Better Auth user for an additional seed user
+   * (e.g. a STAFF user used by the E2E suite). Name and role are set on the
+   * domain User row by the caller; this method only provisions the auth record.
+   */
+  ensureExtraAuthUser?(email: string, password: string, name: string): Promise<{ authUserId: string }>;
 };
 
 export type SeedOptions = {
@@ -19,6 +25,16 @@ export type SeedOptions = {
   ownerPassword: string;
   ownerName: string;
   authAdapter: SeedAuthAdapter;
+  /**
+   * Optional STAFF user to create alongside the owner. Used by the E2E suite
+   * so tests that assert role-gated UI can log in as a non-OWNER without
+   * needing a user-management UI that does not yet exist.
+   */
+  staffUser?: {
+    email: string;
+    password: string;
+    name: string;
+  };
   /**
    * Optional Prisma client instance. Defaults to the global singleton when not
    * provided (production CLI path). Pass `pg.prisma` from test helpers to avoid
@@ -59,6 +75,30 @@ export async function seed(opts: SeedOptions) {
       name: opts.ownerName,
     },
   });
+
+  // Optionally seed an extra STAFF user for E2E role-gating tests.
+  if (opts.staffUser && opts.authAdapter.ensureExtraAuthUser) {
+    const { authUserId: staffAuthUserId } = await opts.authAdapter.ensureExtraAuthUser(
+      opts.staffUser.email,
+      opts.staffUser.password,
+      opts.staffUser.name,
+    );
+    await db.user.upsert({
+      where: { authUserId: staffAuthUserId },
+      create: {
+        tenantId: tenant.id,
+        authUserId: staffAuthUserId,
+        email: opts.staffUser.email,
+        name: opts.staffUser.name,
+        role: 'STAFF',
+        mustChangePassword: false,
+      },
+      update: {
+        email: opts.staffUser.email,
+        name: opts.staffUser.name,
+      },
+    });
+  }
 
   return { tenant, user };
 }
@@ -103,11 +143,19 @@ export async function runSeedCli(deps: SeedCliDeps = {}): Promise<void> {
     err('apps/web auth module not built. Run pnpm --filter @solutio/web build first.');
     return exit(1);
   }
+  const staffEmail = env.SEED_STAFF_EMAIL;
+  const staffPassword = env.SEED_STAFF_PASSWORD;
+  const staffUser =
+    staffEmail && staffPassword
+      ? { email: staffEmail, password: staffPassword, name: env.SEED_STAFF_NAME ?? 'Atrium Staff' }
+      : undefined;
+
   await seed({
     ownerEmail: email,
     ownerPassword: password,
     ownerName: env.SEED_OWNER_NAME ?? 'Atrium Owner',
     authAdapter: createSeedAuthAdapter(),
+    staffUser,
     prismaClient: deps.prismaClient,
   });
   log('Seed complete.');

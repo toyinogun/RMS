@@ -4,6 +4,7 @@ export type { TenantPrismaClient } from './tenant-client';
 export {
   recordPayment,
   listPaymentsForPlan,
+  reversePayment,
   PlanNotPayableError,
   PaymentBeforePlanStartError,
   PaymentOverpayError,
@@ -12,11 +13,16 @@ export {
   AllocationDuplicateInstallmentError,
   AllocationExceedsOutstandingError,
   PaymentRetryableSerializationError,
+  PaymentNotFoundError,
+  PaymentAlreadyReversedError,
+  CannotReverseReversalRowError,
 } from './payments-service';
 export type {
   PaymentRecordInput,
   RecordPaymentResult,
   PaymentListRow,
+  ReversePaymentInput,
+  ReversePaymentResult,
 } from './payments-service';
 export type * from '@prisma/client';
 export {

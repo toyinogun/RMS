@@ -255,11 +255,7 @@ Each milestone is independently shippable. Atrium can start using earlier milest
 - Property race test: two concurrent plan-create attempts on same property — first succeeds, second aborts with friendly error
 
 ### M5 · Payment reversal
-- `reverse()` pure fn in `@solutio/shared/payments` + unit tests
-- Reverse action on Payment detail with confirmation Dialog explaining consequences
-- Idempotency enforced by unique constraint on `reversesPaymentId`
-- Original Payment shows "Reversed by …" badge; reversal Payment shows "Reversal of …" badge
-- Completed plan transitions back to ACTIVE when a closing payment is reversed
+Implemented per `docs/superpowers/plans/2026-05-16-phase-1a-m5-payment-reversal.md`.
 
 **Acceptance**
 - OWNER/ADMIN reverses a payment; installments revert; balance restored; both badges appear
