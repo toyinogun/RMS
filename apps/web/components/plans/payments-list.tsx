@@ -110,7 +110,7 @@ export function PaymentsList({ payments, userRole, planStatus, planId }: Payment
                   {canReverse ? (
                     <ReversePaymentDialog
                       trigger={
-                        <Button variant="ghost" size="sm">
+                        <Button variant="ghost" size="sm" data-testid="reverse-payment">
                           Reverse
                         </Button>
                       }

@@ -62,5 +62,17 @@ export function createSeedAuthAdapter(): SeedAuthAdapter {
       }
       return { authUserId: signupResult.user.id };
     },
+    async ensureExtraAuthUser(email: string, password: string, name: string) {
+      const existing = await prisma.authUser.findUnique({ where: { email } });
+      if (existing) return { authUserId: existing.id };
+      const signupResult = await auth.api.signUpEmail({
+        body: { email, password, name },
+        headers: new Headers(),
+      });
+      if (!signupResult.user) {
+        throw new Error(`Better Auth signup failed for ${email}`);
+      }
+      return { authUserId: signupResult.user.id };
+    },
   };
 }
