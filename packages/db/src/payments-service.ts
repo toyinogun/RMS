@@ -396,8 +396,9 @@ export type PaymentListRow = {
  * the recorder's display name (joined manually via a second `user.findMany`,
  * since the M4 schema does not define a Payment → User relation).
  *
- * Does not filter or include reversal/reversed metadata — that ships in a
- * later milestone alongside the reversal workflow itself.
+ * Also includes bidirectional reversal linkage via a batched extra query:
+ * `reversedById` (non-null when this row is itself a reversal) and
+ * `reversedByPaymentId` (non-null when this row has been reversed).
  */
 export async function listPaymentsForPlan(
   ctx: TenantContext,
@@ -603,10 +604,8 @@ async function applyReversal(
     id: string;
     planId: string;
     amountKobo: Kobo;
-    paidAt: Date;
     method: PaymentMethod;
     reference: string | null;
-    reversedById: string | null;
   },
   reversalAllocations: ReadonlyArray<{ installmentId: string; amountKobo: Kobo }>,
   installments: InstallmentForPayment[],
@@ -771,10 +770,8 @@ export async function reversePayment(
             id: original.id,
             planId: original.planId,
             amountKobo: original.amountKobo as Kobo,
-            paidAt: original.paidAt,
             method: original.method,
             reference: original.reference,
-            reversedById: original.reversedById,
           },
           reversalPlan.allocations,
           installmentsForWrite,
