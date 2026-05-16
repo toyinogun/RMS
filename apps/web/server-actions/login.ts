@@ -35,7 +35,10 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
   // Use signInEmail's return value directly — the freshly-minted session
   // cookie is on the outgoing response, so a same-action `getSession()` call
   // would still read the OLD request cookies and return null.
-  if (signInResult?.user) {
+  // Guard on `?.user?.id` (not `?.user`) so a `{ user: null }` Better Auth
+  // quirk falls through to the redirect → layout-gate backstop, instead of
+  // calling isAuthUserDeactivated(undefined) and letting it through silently.
+  if (signInResult?.user?.id) {
     const deactivated = await isAuthUserDeactivated(signInResult.user.id);
     if (deactivated) {
       await auth.api.signOut({ headers: await headers() });

@@ -114,6 +114,10 @@ function isEmailConflict(err: unknown): boolean {
  * Returns true if the domain User row linked to `authUserId` has been deactivated.
  * Used by the login action to reject deactivated users immediately after sign-in.
  * Returns false if no matching domain user exists (edge case — let the layout gate handle it).
+ *
+ * Intentionally bypasses forTenant — `authUserId` is globally unique in the
+ * auth.User table, and the login action runs *before* a tenant context exists.
+ * Do NOT "fix" this to a scoped client.
  */
 export async function isAuthUserDeactivated(authUserId: string): Promise<boolean> {
   const user = await prisma.user.findFirst({
@@ -254,6 +258,9 @@ export async function reactivateUser(
 
   const scoped = forTenant(prisma, ctx.tenantId);
 
+  // Default isolation is deliberate — concurrent reactivations converge to the
+  // same idempotent end state (deactivatedAt = null). Do NOT add SERIALIZABLE
+  // without also adding a guard that needs it.
   return scoped.$transaction(async (tx) => {
     const target = await tx.user.findUnique({
       where: { id: userId },
