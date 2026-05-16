@@ -42,10 +42,8 @@ export type PaymentReverseState =
  * for path revalidation. The planId is provided via a hidden input in the
  * reversal dialog (Task 5) and is validated here as a UUID.
  */
-const actionInputSchema = z.object({
-  paymentId: z.string().uuid({ message: 'Invalid payment id' }),
+const actionInputSchema = paymentReversalSchema.extend({
   planId: z.string().uuid({ message: 'Invalid plan id' }),
-  reason: paymentReversalSchema.shape.reason,
 });
 
 export async function reversePaymentAction(
