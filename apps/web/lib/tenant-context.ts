@@ -27,9 +27,11 @@ export const getTenantContext = cache(async (): Promise<TenantContext | null> =>
       role: true,
       email: true,
       mustChangePassword: true,
+      deactivatedAt: true,
     },
   });
   if (!domainUser) return null;
+  if (domainUser.deactivatedAt !== null) return null;
 
   return {
     tenantId: domainUser.tenantId,
