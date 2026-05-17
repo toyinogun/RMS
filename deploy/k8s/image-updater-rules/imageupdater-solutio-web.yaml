@@ -1,0 +1,21 @@
+# Tells the argocd-image-updater controller (v1.2.0+) to pick up the
+# legacy annotation-based config that already lives on the solutio-web
+# Argo CD Application (deploy/argocd/apps/solutio-web.yaml). Without this
+# CR, the controller sits idle — v1.2.0 moved to a CRD-driven config model.
+#
+# Behaviour:
+#   - namePattern matches the Application named "solutio-web" in the argocd ns
+#   - useAnnotations: true → controller reads image-list, update-strategy,
+#     write-back-method, and write-back-target annotations off that Application
+apiVersion: argocd-image-updater.argoproj.io/v1alpha1
+kind: ImageUpdater
+metadata:
+  name: solutio-web
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-image-updater
+    app.kubernetes.io/part-of: argocd-image-updater-controller
+spec:
+  applicationRefs:
+    - namePattern: "solutio-web"
+      useAnnotations: true
