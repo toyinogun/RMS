@@ -3,6 +3,7 @@ interface StatCardProps {
   value: string;
   hint?: string;
   tone?: 'default' | 'warning' | 'success' | 'destructive';
+  testId?: string;
 }
 
 const TONE_CLASSES: Record<NonNullable<StatCardProps['tone']>, string> = {
@@ -20,10 +21,17 @@ const TONE_CLASSES: Record<NonNullable<StatCardProps['tone']>, string> = {
  * The caller is responsible for formatting `value` — pass `formatKobo(...)`
  * for money or `.toString()` for counts. `tabular-nums` keeps values aligned
  * when multiple cards are placed in a horizontal grid.
+ *
+ * `testId` is optional and renders as `data-testid` on the outer container so
+ * E2E tests can address a single card unambiguously (label text alone is too
+ * loose — every ancestor div "has" the label text).
  */
-export function StatCard({ label, value, hint, tone = 'default' }: StatCardProps) {
+export function StatCard({ label, value, hint, tone = 'default', testId }: StatCardProps) {
   return (
-    <div className="rounded-lg border border-paper-300 bg-paper-50 p-5">
+    <div
+      className="rounded-lg border border-paper-300 bg-paper-50 p-5"
+      data-testid={testId}
+    >
       <div className="text-sm text-ink-500">{label}</div>
       <div className={`text-3xl font-semibold tabular-nums ${TONE_CLASSES[tone]}`}>{value}</div>
       {hint ? <div className="mt-1 text-xs text-ink-500">{hint}</div> : null}

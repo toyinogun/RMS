@@ -39,17 +39,20 @@ export default async function HomePage() {
           value={formatKobo(stats.todayNetTotalKobo)}
           hint="Net of reversals, Lagos time"
           tone={todayTone}
+          testId="stat-card-today-payments"
         />
         <StatCard
           label="Overdue installments"
           value={stats.overdueInstallmentCount.toString()}
           hint="Past due and not yet paid"
           tone={overdueTone}
+          testId="stat-card-overdue-installments"
         />
         <StatCard
           label="Active plans"
           value={stats.activePlanCount.toString()}
           hint="Plans currently collecting"
+          testId="stat-card-active-plans"
         />
       </section>
 

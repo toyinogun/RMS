@@ -530,6 +530,40 @@ test('M5-A: OWNER reverses payment, plan COMPLETED → ACTIVE', async ({ page })
   await expect(rowsAfterReload.nth(1)).toContainText('Reversed');
   await expect(page.getByText('ACTIVE', { exact: true })).toBeVisible();
 
+  // ------------------------------------------------------------------ //
+  // M7: dashboard reflects the record+reverse cycle                     //
+  // ------------------------------------------------------------------ //
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: /^dashboard$/i })).toBeVisible();
+
+  // Three stat-card labels are visible.
+  await expect(page.getByText("Today's payments")).toBeVisible();
+  await expect(page.getByText('Overdue installments')).toBeVisible();
+  await expect(page.getByText('Active plans')).toBeVisible();
+
+  // After M5-A reversed the closing payment, the plan is back to ACTIVE
+  // → active-plans card shows a non-empty integer count (≥ 1).
+  const activeCard = page.getByTestId('stat-card-active-plans');
+  await expect(activeCard).toBeVisible();
+  await expect(activeCard).toContainText(/\d+/);
+
+  // Recent activity table is present and the M5-A reversal row is the most
+  // recent (paidAt = reversal-time, which is "now"). Reversal marker (↩)
+  // is rendered inside the amount cell for reversal rows.
+  const activityTable = page.getByRole('table');
+  await expect(activityTable).toBeVisible();
+  await expect(activityTable.getByText('↩').first()).toBeVisible();
+
+  // The negative amount from this test's closing-payment reversal is shown.
+  // formatKobo prints '-₦110,000.00'; be lenient on the .00 in case future
+  // locale tweaks omit it.
+  await expect(activityTable.getByText(/-₦110,000(\.\d{2})?/).first()).toBeVisible();
+
+  // Each activity row has a "View" link via aria-label.
+  await expect(
+    activityTable.getByRole('link', { name: /view payment for/i }).first(),
+  ).toBeVisible();
+
   expect(consoleErrors, `unexpected console.error during run:\n${consoleErrors.join('\n')}`).toEqual([]);
 });
 
