@@ -19,7 +19,10 @@ metadata:
     argocd-image-updater.argoproj.io/web.update-strategy: digest
     argocd-image-updater.argoproj.io/migrate.update-strategy: digest
     argocd-image-updater.argoproj.io/write-back-method: "git:secret:argocd/git-creds"
-    argocd-image-updater.argoproj.io/write-back-target: "kustomization:deploy/k8s/web"
+    # write-back-target is relative to spec.source.path (deploy/k8s/web), so
+    # "." means "the kustomization.yaml in the same directory". An absolute
+    # repo path here gets concatenated and fails ('deploy/k8s/web/deploy/k8s/web').
+    argocd-image-updater.argoproj.io/write-back-target: "kustomization:."
 spec:
   project: default
   source:
