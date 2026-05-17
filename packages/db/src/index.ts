@@ -75,3 +75,5 @@ export type {
   UsersAuthAdapter,
   UserListRow,
 } from './users-service';
+export { getDashboardStats, listRecentActivity } from './dashboard-service';
+export type { DashboardStats, RecentActivityRow } from './dashboard-service';
