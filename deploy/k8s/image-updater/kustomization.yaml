@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Namespace is intentionally NOT set here. install.yaml hard-codes
+# `namespace: argocd` on the two namespaced resources that need it
+# (ServiceAccount + Deployment) and the rest are cluster-scoped
+# (CRD, ClusterRole, ClusterRoleBinding) or use namespace-less
+# names that get bound when an Application referencing this kustomize
+# dir applies it.
+resources:
+  - install.yaml
+images:
+  # Pinned manually until Image Updater itself bootstraps — same approach
+  # as deploy/k8s/web/kustomization.yaml. The digest below resolves the
+  # multi-arch image index for v1.2.0 (quay.io/argoprojlabs/argocd-image-updater).
+  # To bump: `curl -sH 'Accept: application/vnd.oci.image.index.v1+json' \
+  #   https://quay.io/v2/argoprojlabs/argocd-image-updater/manifests/<vX.Y.Z> -D - | \
+  #   grep -i docker-content-digest`
+  - name: quay.io/argoprojlabs/argocd-image-updater
+    digest: sha256:e8624a2dca038cf03eb4bf9a64519795a85401d0d9647be704d252283627edc3
