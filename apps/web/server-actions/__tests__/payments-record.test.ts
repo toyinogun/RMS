@@ -186,6 +186,7 @@ describe('recordPaymentAction', () => {
     expect(revalidatePathMock).toHaveBeenCalledWith(`/plans/${planId}`);
     expect(revalidatePathMock).toHaveBeenCalledWith('/plans');
     expect(revalidatePathMock).toHaveBeenCalledWith('/properties');
+    expect(revalidatePathMock).toHaveBeenCalledWith('/');
   });
 
   test('Manual override happy path: two rows summing to amount → service called with array of two bigint allocations', async () => {

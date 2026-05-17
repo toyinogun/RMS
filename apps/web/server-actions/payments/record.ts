@@ -128,6 +128,7 @@ export async function recordPaymentAction(
   revalidatePath(`/plans/${parsed.data.planId}`);
   revalidatePath('/plans');
   revalidatePath('/properties');
+  revalidatePath('/');
   return {
     ok: true,
     data: { paymentId: result.paymentId, planStatus: result.planStatus },
