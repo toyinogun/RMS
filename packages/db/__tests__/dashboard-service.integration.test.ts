@@ -164,22 +164,71 @@ describe('getDashboardStats', () => {
       monthlyKobo: 100_000_00n,
     });
 
-    // generateSchedule produces a sequenceNo=0 deposit row (dueDate=startDate, amount=0
-    // since we passed depositKobo=0n) plus 6 monthly rows. Mark seq 0 and seq 1 as PAID:
-    // seq 0 is the zero-amount deposit row (irrelevant), seq 1 is the first overdue-by-date
-    // monthly that we want to demonstrate the PAID-exclusion rule on.
+    // generateSchedule produces a sequenceNo=0 deposit row (dueDate=startDate,
+    // amount=0 since we passed depositKobo=0n) plus 6 monthly rows. The seq=0
+    // zero-amount row is excluded by the production query's `amountDueKobo > 0`
+    // filter, so we only need to mark seq=1 PAID to demonstrate the
+    // PAID-exclusion rule on a real (non-zero) overdue installment.
     await pg.prisma.installment.updateMany({
-      where: { planId: seeded.planId, sequenceNo: { in: [0, 1] } },
+      where: { planId: seeded.planId, sequenceNo: 1 },
       data: { status: 'PAID' },
     });
 
     const now = new Date('2026-05-17T13:30:00Z');
     const stats = await getDashboardStats(ctx, now);
     // Monthly due dates: Feb 1, Mar 1, Apr 1, May 1, Jun 1, Jul 1 — at now=May 17:
-    //   seq0 Jan 1 (PAID via setup, excluded), seq1 Feb 1 (PAID, excluded),
+    //   seq0 Jan 1 (zero-amount deposit, excluded by amountDueKobo>0),
+    //   seq1 Feb 1 (PAID, excluded),
     //   seq2 Mar 1, seq3 Apr 1, seq4 May 1 → overdue (3)
     //   seq5 Jun 1, seq6 Jul 1 → future
     expect(stats.overdueInstallmentCount).toBe(3);
+  });
+
+  test('overdueInstallmentCount excludes installments on CANCELLED plans', async () => {
+    const ctx = ctxFor(TENANT_A);
+    // Seed an ACTIVE plan, then mark it CANCELLED (with deletedAt still null).
+    const { planId } = await seedActivePlan({
+      ctx,
+      startDate: new Date('2026-01-01T00:00:00Z'),
+      installmentCount: 6,
+      monthlyKobo: 100_000_00n,
+    });
+    await pg.prisma.plan.update({ where: { id: planId }, data: { status: 'CANCELLED' } });
+    const stats = await getDashboardStats(ctx, new Date('2026-05-17T13:30:00Z'));
+    expect(stats.overdueInstallmentCount).toBe(0);
+  });
+
+  test('overdueInstallmentCount excludes WAIVED installments', async () => {
+    const ctx = ctxFor(TENANT_A);
+    const { planId } = await seedActivePlan({
+      ctx,
+      startDate: new Date('2026-01-01T00:00:00Z'),
+      installmentCount: 6,
+      monthlyKobo: 100_000_00n,
+    });
+    // Mark all overdue installments (seq 1..4, due Feb..May, all <2026-05-17) as WAIVED.
+    // The seq=0 zero-amount deposit row is excluded automatically by the amountDueKobo>0 filter.
+    await pg.prisma.installment.updateMany({
+      where: { planId, sequenceNo: { in: [1, 2, 3, 4] } },
+      data: { status: 'WAIVED' },
+    });
+    const stats = await getDashboardStats(ctx, new Date('2026-05-17T13:30:00Z'));
+    expect(stats.overdueInstallmentCount).toBe(0);
+  });
+
+  test('overdueInstallmentCount excludes zero-amount installments (materialization deposit rows)', async () => {
+    const ctx = ctxFor(TENANT_A);
+    // A fresh ACTIVE plan with depositKobo=0n produces a zero-amount seq=0 row at dueDate=startDate.
+    // With now=2026-05-17 that row is in the past — but it must not count as overdue.
+    // No other installments are past-due in this scenario (start 2026-05-01 → first non-deposit due 2026-06-01).
+    await seedActivePlan({
+      ctx,
+      startDate: new Date('2026-05-01T00:00:00Z'),
+      installmentCount: 6,
+      monthlyKobo: 100_000_00n,
+    });
+    const stats = await getDashboardStats(ctx, new Date('2026-05-17T13:30:00Z'));
+    expect(stats.overdueInstallmentCount).toBe(0);
   });
 
   test('overdueInstallmentCount excludes installments on soft-deleted plans', async () => {
