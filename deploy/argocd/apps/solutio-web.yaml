@@ -5,10 +5,15 @@ metadata:
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "0"
-    # ArgoCD Image Updater configuration — watches the registry and writes the
-    # resolved digest back into deploy/k8s/web/kustomization.yaml's images: block.
-    argocd-image-updater.argoproj.io/image-list: "web=ghcr.io/toyinogun/rms"
+    # ArgoCD Image Updater configuration — watches both registry images and
+    # writes the resolved digests back into deploy/k8s/web/kustomization.yaml's
+    # images: block. Activated by the ImageUpdater CR at
+    # deploy/k8s/image-updater-rules/imageupdater-solutio-web.yaml (v1.2.0+
+    # moved to a CRD-driven model — these annotations only fire when a CR
+    # with useAnnotations: true selects this Application).
+    argocd-image-updater.argoproj.io/image-list: "web=ghcr.io/toyinogun/rms,migrate=ghcr.io/toyinogun/rms-migrate"
     argocd-image-updater.argoproj.io/web.update-strategy: digest
+    argocd-image-updater.argoproj.io/migrate.update-strategy: digest
     argocd-image-updater.argoproj.io/write-back-method: "git:secret:argocd/git-creds"
     argocd-image-updater.argoproj.io/write-back-target: "kustomization:deploy/k8s/web"
 spec:

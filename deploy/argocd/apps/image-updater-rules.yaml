@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd-image-updater-rules
+  namespace: argocd
+  annotations:
+    # Lands after the argocd-image-updater controller App (-8) so the
+    # ImageUpdater CRD is established before the CR applies. Separate
+    # Application keeps controller-vs-config ownership clean.
+    argocd.argoproj.io/sync-wave: "-7"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/toyinogun/RMS.git
+    path: deploy/k8s/image-updater-rules
+    targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=false
