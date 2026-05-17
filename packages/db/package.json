@@ -13,6 +13,7 @@
     "./properties-service": "./src/properties-service.ts",
     "./plans-service": "./src/plans-service.ts",
     "./payments-service": "./src/payments-service.ts",
+    "./dashboard-service": "./src/dashboard-service.ts",
     "./plan-errors": "./src/plan-errors.ts"
   },
   "scripts": {
