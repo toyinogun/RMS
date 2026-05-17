@@ -13,5 +13,5 @@ images:
     digest: sha256:f417f52454858382d55f7bd07ccfce81fefbba0cb50580d01545c9cb88bf35b1
     newTag: main
   - name: ghcr.io/toyinogun/rms-migrate
-    digest: sha256:e4c6afaf428ca0a6d4beecc86396e145c43341b84225d6d0597cf69120616401
+    digest: sha256:583d118a6b3f64f2e6c0ec2273de2c1de4914edb79f346db03201ba5a47965c3
     newTag: main
