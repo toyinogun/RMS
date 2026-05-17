@@ -17,7 +17,8 @@ test('seed owner logs in, is forced to change password, lands on home', async ({
   await page.getByRole('button', { name: /update password/i }).click();
 
   await expect(page).toHaveURL('/');
-  await expect(page.getByRole('heading', { name: /welcome to solutio/i })).toBeVisible();
+  // M7 replaced the welcome page with the home dashboard.
+  await expect(page.getByRole('heading', { name: /^dashboard$/i })).toBeVisible();
   await expect(page.getByRole('main').getByText('owner@atrium.test')).toBeVisible();
 
   await page.getByRole('navigation').getByRole('button', { name: /sign out/i }).click();

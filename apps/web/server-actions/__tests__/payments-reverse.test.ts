@@ -110,6 +110,7 @@ describe('reversePaymentAction', () => {
     expect(res).toEqual({ ok: true, reversalPaymentId, planStatus: 'ACTIVE' });
     expect(reversePaymentMock).toHaveBeenCalledTimes(1);
     expect(revalidatePathMock).toHaveBeenCalledWith(`/plans/${planId}`);
+    expect(revalidatePathMock).toHaveBeenCalledWith('/');
   });
 
   test('ADMIN can reverse a payment → ok: true', async () => {

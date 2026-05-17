@@ -97,6 +97,7 @@ export async function reversePaymentAction(
   }
 
   revalidatePath(`/plans/${parsed.data.planId}`);
+  revalidatePath('/');
   return { ok: true, reversalPaymentId: result.reversalPaymentId, planStatus: result.planStatus };
 }
 
