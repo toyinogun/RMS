@@ -5,24 +5,10 @@ metadata:
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "0"
-    # ArgoCD Image Updater configuration — watches both registry images and
-    # writes the resolved digests back into deploy/k8s/web/kustomization.yaml's
-    # images: block. Activated by the ImageUpdater CR at
-    # deploy/k8s/image-updater-rules/imageupdater-solutio-web.yaml (v1.2.0+
-    # moved to a CRD-driven model — these annotations only fire when a CR
-    # with useAnnotations: true selects this Application).
-    # The :main tag is a moving alias pushed by .github/workflows/release.yml
-    # on every main build. update-strategy: digest follows that tag and
-    # resolves it to the current immutable digest, which is then written
-    # back to deploy/k8s/web/kustomization.yaml.
-    argocd-image-updater.argoproj.io/image-list: "web=ghcr.io/toyinogun/rms:main,migrate=ghcr.io/toyinogun/rms-migrate:main"
-    argocd-image-updater.argoproj.io/web.update-strategy: digest
-    argocd-image-updater.argoproj.io/migrate.update-strategy: digest
-    argocd-image-updater.argoproj.io/write-back-method: "git:secret:argocd/git-creds"
-    # write-back-target is relative to spec.source.path (deploy/k8s/web), so
-    # "." means "the kustomization.yaml in the same directory". An absolute
-    # repo path here gets concatenated and fails ('deploy/k8s/web/deploy/k8s/web').
-    argocd-image-updater.argoproj.io/write-back-target: "kustomization:."
+    # Image-updater configuration lives in the ImageUpdater CR at
+    # deploy/k8s/image-updater-rules/imageupdater-solutio-web.yaml — the
+    # legacy argocd-image-updater.argoproj.io/* annotations that used to
+    # be here are not honored in v1.2.0 (useAnnotations defaults to false).
 spec:
   project: default
   source:
