@@ -42,3 +42,7 @@ deploy/**/*.secret.yaml
 # generated Prisma client
 packages/db/src/generated/
 .superpowers/
+
+# local agent worktrees
+.worktrees/
+.claire/

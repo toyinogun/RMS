@@ -6,12 +6,13 @@
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./installments": "./src/installments/index.ts",
-    "./payments": "./src/payments/index.ts",
-    "./money": "./src/money/index.ts",
-    "./tenant": "./src/tenant/index.ts",
     "./customers": "./src/customers/index.ts",
-    "./properties": "./src/properties/index.ts"
+    "./installments": "./src/installments/index.ts",
+    "./money": "./src/money/index.ts",
+    "./payments": "./src/payments/index.ts",
+    "./properties": "./src/properties/index.ts",
+    "./tenant": "./src/tenant/index.ts",
+    "./users": "./src/users/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
