@@ -11,7 +11,11 @@ metadata:
     # deploy/k8s/image-updater-rules/imageupdater-solutio-web.yaml (v1.2.0+
     # moved to a CRD-driven model — these annotations only fire when a CR
     # with useAnnotations: true selects this Application).
-    argocd-image-updater.argoproj.io/image-list: "web=ghcr.io/toyinogun/rms,migrate=ghcr.io/toyinogun/rms-migrate"
+    # The :main tag is a moving alias pushed by .github/workflows/release.yml
+    # on every main build. update-strategy: digest follows that tag and
+    # resolves it to the current immutable digest, which is then written
+    # back to deploy/k8s/web/kustomization.yaml.
+    argocd-image-updater.argoproj.io/image-list: "web=ghcr.io/toyinogun/rms:main,migrate=ghcr.io/toyinogun/rms-migrate:main"
     argocd-image-updater.argoproj.io/web.update-strategy: digest
     argocd-image-updater.argoproj.io/migrate.update-strategy: digest
     argocd-image-updater.argoproj.io/write-back-method: "git:secret:argocd/git-creds"
