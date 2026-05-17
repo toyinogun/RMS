@@ -25,7 +25,7 @@ export default async function HomePage() {
     stats.overdueInstallmentCount > 0 ? 'warning' : 'default';
 
   return (
-    <main className="mx-auto max-w-5xl space-y-10 px-6 py-10">
+    <section className="space-y-10">
       <header>
         <h1 className="text-2xl font-semibold">Dashboard</h1>
         <p className="mt-1 text-sm text-ink-500">
@@ -93,6 +93,6 @@ export default async function HomePage() {
           Sign out
         </button>
       </form>
-    </main>
+    </section>
   );
 }
