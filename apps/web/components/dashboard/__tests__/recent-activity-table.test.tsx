@@ -7,7 +7,7 @@ import type { Kobo } from '@solutio/shared/money';
 const fakeRow = (overrides: Partial<RecentActivityRow> = {}): RecentActivityRow => ({
   id: 'pay-1',
   planId: 'plan-1',
-  amountKobo: 50_000_00n as Kobo,
+  amountKobo: 5_000_000n as Kobo,
   paidAt: new Date('2026-05-17T10:00:00Z'),
   method: 'CASH',
   isReversal: false,
@@ -27,16 +27,17 @@ describe('<RecentActivityTable />', () => {
     expect(screen.getByText('Ada Lovelace')).toBeInTheDocument();
     expect(screen.getByText('AH-001')).toBeInTheDocument();
     expect(screen.getByText('₦50,000.00')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /view/i })).toHaveAttribute(
-      'href',
-      '/plans/plan-1?tab=payments#payment-pay-1',
-    );
+    const link = screen.getByRole('link', {
+      name: /view payment for Ada Lovelace on AH-001/i,
+    });
+    expect(link).toHaveAttribute('href', '/plans/plan-1?tab=payments#payment-pay-1');
+    expect(link).toHaveTextContent(/view/i);
   });
 
   test('flags reversal rows with negative amount + ↩ marker', () => {
     render(
       <RecentActivityTable
-        rows={[fakeRow({ id: 'pay-2', amountKobo: -50_000_00n as Kobo, isReversal: true })]}
+        rows={[fakeRow({ id: 'pay-2', amountKobo: -5_000_000n as Kobo, isReversal: true })]}
       />,
     );
     // formatKobo renders the negative directly; the marker is a separate visual element

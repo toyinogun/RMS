@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { Route } from 'next';
-import { formatKobo, type Kobo } from '@solutio/shared/money';
+import { formatKobo } from '@solutio/shared/money';
 import type { RecentActivityRow } from '@solutio/db/dashboard-service';
 import {
   Table,
@@ -65,11 +65,19 @@ export function RecentActivityTable({ rows }: RecentActivityTableProps) {
               <TableCell>{row.propertyCode}</TableCell>
               <TableCell>{row.method}</TableCell>
               <TableCell className={amountClass}>
-                {row.isReversal ? '↩ ' : ''}
-                {formatKobo(row.amountKobo as Kobo)}
+                {row.isReversal && (
+                  <span className="mr-1" aria-hidden="true">
+                    ↩
+                  </span>
+                )}
+                {formatKobo(row.amountKobo)}
               </TableCell>
               <TableCell>
-                <Link href={href} className="text-sm text-clay-600 hover:underline">
+                <Link
+                  href={href}
+                  className="text-sm text-clay-600 hover:underline"
+                  aria-label={`View payment for ${row.customerName} on ${row.propertyCode}`}
+                >
                   View →
                 </Link>
               </TableCell>
