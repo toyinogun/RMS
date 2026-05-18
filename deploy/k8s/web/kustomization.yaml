@@ -10,8 +10,8 @@ resources:
   - seed-job.yaml
 images:
   - name: ghcr.io/toyinogun/rms
-    digest: sha256:f3ddae1057387b5a75c169cf9df2dc4e34b5616afd69bf630079bb3a2dc61ce8
+    digest: sha256:9c715b37a44ada643ab46eb12e15e6ffd7254ad6295fcf7264cb5e4c3116c1e4
     newTag: main
   - name: ghcr.io/toyinogun/rms-migrate
-    digest: sha256:f76be1b86b409dc6bbf41574be0db4ea0a7f686a23162dee15d69ebfeefc13b5
+    digest: sha256:473d339a69db2093537728fa375be21932bc8ec01169fa106e0a31bd702fdf86
     newTag: main
